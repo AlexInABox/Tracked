@@ -1,4 +1,4 @@
-name: Sized Build & Release
+name: Tracked Build & Release
 on:
   push:
     branches:
@@ -33,10 +33,10 @@ jobs:
 
       - name: Build
         run: |
-          msbuild Sized\Sized.csproj -t:rebuild -property:Configuration=Release -property:ReferencePath="${{ env.REFERENCES_PATH }}"
+          msbuild Tracked\Tracked.csproj -t:rebuild -property:Configuration=Release -property:ReferencePath="${{ env.REFERENCES_PATH }}"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Sized
-          path: "Sized/bin/Release/net4.8.1/Sized.dll"
+          name: Tracked
+          path: "Tracked/bin/Release/net4.8.1/Tracked.dll"

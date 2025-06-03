@@ -2,7 +2,7 @@
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sized", "Sized\Sized.csproj", "{E1BD143F-4951-45C6-B975-8CF48097F137}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tracked", "Tracked\Tracked.csproj", "{E1BD143F-4951-45C6-B975-8CF48097F137}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

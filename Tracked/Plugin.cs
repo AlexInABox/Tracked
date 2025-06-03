@@ -4,15 +4,15 @@ using LabApi.Features.Console;
 using LabApi.Loader;
 using LabApi.Loader.Features.Plugins;
 
-namespace Sized;
+namespace Tracked;
 
 // ReSharper disable once ClassNeverInstantiated.Global
 public class Plugin : Plugin<Config>
 {
-    public override string Name { get; } = "Sized";
+    public override string Name { get; } = "Tracked";
 
     public override string Description { get; } =
-        "A terrible plugin for SCP:SL using the LabAPI framework that gives each player a random size between two specified values at the start of the round and persists it until the round ends. ";
+        "A terrible plugin for the SCP:SL server \"Zeitvertreib\" that tracks player statistics and writes them to a Cloudflare D1 database.";
 
     public override string Author { get; } = "AlexInABox";
     public override Version Version { get; } = new(1, 0, 0);
