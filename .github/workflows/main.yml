@@ -1,0 +1,42 @@
+name: Sized Build & Release
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+env:
+  REFERENCES_URL: https://exslmod-team.github.io/SL-References/Dev.zip
+  REFERENCES_PATH: ${{ github.workspace }}/References
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Packages
+        run: nuget restore
+
+      - name: Get Build References
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri ${{ env.REFERENCES_URL }} -OutFile ${{ github.workspace }}/Dev.zip
+          Expand-Archive -Path Dev.zip -DestinationPath ${{ env.REFERENCES_PATH }}
+
+      - name: Setup MSBuild.exe
+        uses: microsoft/Setup-MSBuild@v2
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: "true"
+
+      - name: Build
+        run: |
+          msbuild Sized\Sized.csproj -t:rebuild -property:Configuration=Release -property:ReferencePath="${{ env.REFERENCES_PATH }}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sized
+          path: "Sized/bin/Release/net4.8.1/Sized.dll"
