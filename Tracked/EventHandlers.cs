@@ -54,7 +54,10 @@ public static class EventHandlers
         var userId = ev.Player.UserId;
         var timestamp = (int)Time.time;
 
+        if (!PlayerStartingTimestamps.ContainsKey(userId)) return;
+        
         PlayerTimePlayedThisRound[userId] += timestamp - PlayerStartingTimestamps[userId];
+        PlayerStartingTimestamps.Remove(userId);
     }
 
     private static void OnRoundEnding(RoundEndingEventArgs ev)
@@ -66,6 +69,10 @@ public static class EventHandlers
             if (player.IsDummy || player.IsHost) continue;
 
             var userId = player.UserId;
+            
+            if (string.IsNullOrEmpty(userId)) continue; //HATE. LET ME TELL YOU HOW MUCH I'VE COME TO HATE LABAPI!!
+
+            if (!PlayerStartingTimestamps.ContainsKey(userId)) continue;
 
             PlayerTimePlayedThisRound[userId] += endTimestamp - PlayerStartingTimestamps[userId];
         }
@@ -99,5 +106,8 @@ public static class EventHandlers
         {
             Logger.Debug($"Failed to upload player times to database: {ex}");
         }
+        
+        PlayerStartingTimestamps.Clear();
+        PlayerTimePlayedThisRound.Clear();
     }
 }
