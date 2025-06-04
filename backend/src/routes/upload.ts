@@ -2,6 +2,8 @@ export async function onRequestPost(request: Request, env: Env, ctx: ExecutionCo
     try {
         const token = request.headers.get("Authorization");
         
+        console.log('Upload POST request received with token:', token);
+        console.log('Must match token:', env.APITOKEN);
         // Verify authorization token against environment variable
         if (!token || token !== env.APITOKEN) {
             return new Response("Unauthorized", { status: 401 });

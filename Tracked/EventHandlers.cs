@@ -1,9 +1,14 @@
+using System;
 using System.Collections.Generic;
+using System.Net.Http;
+using System.Text;
 using LabApi.Events.Arguments.PlayerEvents;
 using LabApi.Events.Arguments.ServerEvents;
 using LabApi.Events.Handlers;
 using LabApi.Features.Wrappers;
+using Newtonsoft.Json;
 using UnityEngine;
+using Logger = LabApi.Features.Console.Logger;
 
 namespace Tracked;
 
@@ -20,20 +25,22 @@ public static class EventHandlers
 
         // Ending calculate conditions
         PlayerEvents.Left += OnLeft;
-        ServerEvents.RoundEnded += OnRoundEnded;
+        ServerEvents.RoundEnding += OnRoundEnding;
     }
 
     public static void UnregisterEvents()
     {
         PlayerEvents.Joined -= OnJoined;
         PlayerEvents.Left -= OnLeft;
-        ServerEvents.RoundEnded -= OnRoundEnded;
+        ServerEvents.RoundEnding -= OnRoundEnding;
     }
 
     private static void OnJoined(PlayerJoinedEventArgs ev)
     {
-        string userId = ev.Player.UserId;
-        int timestamp = (int)Time.time;
+        if (ev.Player.IsDummy || ev.Player.IsHost) return;
+
+        var userId = ev.Player.UserId;
+        var timestamp = (int)Time.time;
 
         PlayerStartingTimestamps[userId] = timestamp;
 
@@ -42,19 +49,23 @@ public static class EventHandlers
 
     private static void OnLeft(PlayerLeftEventArgs ev)
     {
-        string userId = ev.Player.UserId;
-        int timestamp = (int)Time.time;
+        if (ev.Player.IsDummy || ev.Player.IsHost) return;
+
+        var userId = ev.Player.UserId;
+        var timestamp = (int)Time.time;
 
         PlayerTimePlayedThisRound[userId] += timestamp - PlayerStartingTimestamps[userId];
     }
 
-    private static void OnRoundEnded(RoundEndedEventArgs ev)
+    private static void OnRoundEnding(RoundEndingEventArgs ev)
     {
-        int endTimestamp = (int)Time.time;
+        var endTimestamp = (int)Time.time;
 
-        foreach (Player player in Player.List)
+        foreach (var player in Player.List)
         {
-            string userId = player.UserId;
+            if (player.IsDummy || player.IsHost) continue;
+
+            var userId = player.UserId;
 
             PlayerTimePlayedThisRound[userId] += endTimestamp - PlayerStartingTimestamps[userId];
         }
@@ -63,9 +74,30 @@ public static class EventHandlers
         UploadTimesToDatabase();
     }
 
-    private static void UploadTimesToDatabase()
+    private static async void UploadTimesToDatabase()
     {
-        // This method should be implemented to upload the PlayerTimePlayedThisRound data to the database.
-        // It is currently a placeholder and needs to be filled with actual database interaction logic.
+        try
+        {
+            var config = Plugin.Instance.Config;
+            var json = JsonConvert.SerializeObject(PlayerTimePlayedThisRound);
+
+            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Payload: {json}");
+
+            using (var client = new HttpClient())
+            {
+                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = await client.PostAsync(config.EndpointUrl, content);
+
+                var responseText = await response.Content.ReadAsStringAsync();
+                Logger.Info($"Uploaded player times to database. Response: {responseText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Debug($"Failed to upload player times to database: {ex}");
+        }
     }
 }
