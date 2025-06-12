@@ -2,7 +2,7 @@ export async function onRequestPost(request: Request, env: Env, ctx: ExecutionCo
     try {
         const token = request.headers.get("Authorization");
         
-        console.log('Upload POST request received with token:', token);
+        console.log('Upload times POST request received with token:', token);
         console.log('Must match token:', env.APITOKEN);
         // Verify authorization token against environment variable
         if (!token || token !== env.APITOKEN) {
@@ -31,7 +31,7 @@ export async function onRequestPost(request: Request, env: Env, ctx: ExecutionCo
         return Response.json({ success: true, message: "Player data updated successfully" });
         
     } catch (error) {
-        console.error('Upload POST error:', error);
+        console.error('Upload times POST error:', error);
         if (error instanceof SyntaxError) {
             return new Response("Invalid JSON", { status: 400 });
         }

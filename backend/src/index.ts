@@ -1,7 +1,9 @@
-import * as upload from './routes/upload.js';
+import * as uploadTimes from './routes/upload/times.js';
+import * as uploadKills from './routes/upload/kills.js';
 
 const routes: Record<string, any> = {
-	'/upload': upload
+	'/upload/times': uploadTimes,
+	'/upload/kills': uploadKills
 };
 
 export default {
