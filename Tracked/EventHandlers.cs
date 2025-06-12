@@ -78,7 +78,7 @@ public static class EventHandlers
     {
         if (ev.Player.IsDummy || ev.Player.IsHost) return;
 
-        var timestamp = (int)Time.time;
+        var timestamp = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds(); //epoch
         var targetId = "anonymous";
         var attackerId = "anonymous";
         
