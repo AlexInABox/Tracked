@@ -83,7 +83,7 @@ public static class EventHandlers
         var attackerId = "anonymous";
         
         if (!ev.Player.DoNotTrack) targetId = ev.Player.UserId;
-        if (ev.Attacker != null && !ev.Attacker.DoNotTrack) attackerId = ev.Attacker.UserId;
+        if (ev.Attacker != null && !ev.Attacker.DoNotTrack && !ev.Attacker.IsHost && !ev.Attacker.IsDummy) attackerId = ev.Attacker.UserId;
 
         KillsThisRound.Add(new KillRecord(
             attackerId,

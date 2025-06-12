@@ -1,7 +1,7 @@
 interface KillRecord {
-    attacker: string;
-    target: string;
-    timestamp: number;
+    Attacker: string;
+    Target: string;
+    Timestamp: number;
 }
 
 export async function onRequestPost(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -25,10 +25,10 @@ export async function onRequestPost(request: Request, env: Env, ctx: ExecutionCo
         
         // Validate each kill record
         for (const kill of requestData) {
-            if (typeof kill.attacker !== 'string' || typeof kill.target !== 'string') {
+            if (typeof kill.Attacker !== 'string' || typeof kill.Target !== 'string') {
                 return new Response("Invalid kill record: attacker and target must be strings", { status: 400 });
             }
-            if (typeof kill.timestamp !== 'number' || !Number.isInteger(kill.timestamp)) {
+            if (typeof kill.Timestamp !== 'number' || !Number.isInteger(kill.Timestamp)) {
                 return new Response("Invalid kill record: timestamp must be an integer", { status: 400 });
             }
         }
@@ -37,7 +37,7 @@ export async function onRequestPost(request: Request, env: Env, ctx: ExecutionCo
         for (const kill of requestData) {
             await env["zeitvertreib-data"]
                 .prepare(`INSERT INTO kills (attacker, target, timestamp) VALUES (?, ?, ?)`)
-                .bind(kill.attacker, kill.target, kill.timestamp)
+                .bind(kill.Attacker, kill.Target, kill.Timestamp)
                 .run();
         }
         
