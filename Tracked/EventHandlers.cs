@@ -22,6 +22,9 @@ public static class EventHandlers
     private static readonly Dictionary<string, int> PlayerTimePlayedThisRound = new();
     private static readonly Dictionary<string, int> PlayerRoundsPlayedThisRound = new();
     private static readonly List<KillRecord> KillsThisRound = [];
+    private static readonly Dictionary<string, int> PlayerMedkitsUsedThisRound = new();
+    private static readonly Dictionary<string, int> PlayerColasUsedThisRound = new();
+    private static readonly Dictionary<string, int> PlayerAdrenalineUsedThisRound = new();
 
     public static void RegisterEvents()
     {
@@ -31,6 +34,9 @@ public static class EventHandlers
 
         // Kill stuff
         PlayerEvents.Death += OnDeath;
+        
+        //Events stuff
+        PlayerEvents.UsedItem += OnUsedItem;
 
         // Ending calculate conditions
         PlayerEvents.Left += OnLeft;
@@ -42,6 +48,7 @@ public static class EventHandlers
         PlayerEvents.Joined -= OnJoined;
         PlayerEvents.Left -= OnLeft;
         PlayerEvents.Death -= OnDeath;
+        PlayerEvents.UsedItem -= OnUsedItem;
         ServerEvents.RoundStarting -= OnRoundStarting;
         ServerEvents.RoundEnding -= OnRoundEnding;
     }
@@ -102,10 +109,47 @@ public static class EventHandlers
         Logger.Debug($"Kill recorded: {attackerId} -> {targetId} at {timestamp}");
     }
 
+    private static void OnUsedItem(PlayerUsedItemEventArgs ev)
+    {
+        bool isMedkit = ev.UsableItem.Type == ItemType.Medkit;
+        bool isAdrenaline = ev.UsableItem.Type == ItemType.Adrenaline;
+        bool isCola = ev.UsableItem.Type == ItemType.SCP207;
+        
+        if (!isMedkit && !isAdrenaline && !isCola) return;
+        
+        var userId = ev.Player.UserId;
+        if (string.IsNullOrEmpty(userId) || ev.Player.IsDummy || ev.Player.IsHost || ev.Player.DoNotTrack) return;
+        
+        if (isMedkit)
+        {
+            if (!PlayerMedkitsUsedThisRound.ContainsKey(userId))
+                PlayerMedkitsUsedThisRound[userId] = 0;
+            PlayerMedkitsUsedThisRound[userId]++;
+            Logger.Debug($"Player {userId} used a medkit. Total this round: {PlayerMedkitsUsedThisRound[userId]}");
+        }
+        else if (isCola)
+        {
+            if (!PlayerColasUsedThisRound.ContainsKey(userId))
+                PlayerColasUsedThisRound[userId] = 0;
+            PlayerColasUsedThisRound[userId]++;
+            Logger.Debug($"Player {userId} used a cola. Total this round: {PlayerColasUsedThisRound[userId]}");
+        }
+        else if (isAdrenaline)
+        {
+            if (!PlayerAdrenalineUsedThisRound.ContainsKey(userId))
+                PlayerAdrenalineUsedThisRound[userId] = 0;
+            PlayerAdrenalineUsedThisRound[userId]++;
+            Logger.Debug($"Player {userId} used adrenaline. Total this round: {PlayerAdrenalineUsedThisRound[userId]}");
+        }
+    }
+
     private static void OnRoundStarting(RoundStartingEventArgs ev)
     {
         RoundStartTimestamp = (int)Time.time;
         PlayerRoundsPlayedThisRound.Clear();
+        PlayerMedkitsUsedThisRound.Clear();
+        PlayerColasUsedThisRound.Clear();
+        PlayerAdrenalineUsedThisRound.Clear();
     }
 
     private static void OnRoundEnding(RoundEndingEventArgs ev)
@@ -135,6 +179,9 @@ public static class EventHandlers
         UploadTimesToDatabase();
         UploadKillsToDatabase();
         UploadRoundsToDatabase();
+        UploadMedkitsToDatabase();
+        UploadColasToDatabase();
+        UploadAdrenalineToDatabase();
     }
 
     private static async void UploadTimesToDatabase()
@@ -223,6 +270,93 @@ public static class EventHandlers
         }
 
         PlayerRoundsPlayedThisRound.Clear();
+    }
+
+    private static async void UploadMedkitsToDatabase()
+    {
+        try
+        {
+            var config = Plugin.Instance.Config;
+            var json = JsonConvert.SerializeObject(PlayerMedkitsUsedThisRound);
+
+            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Payload: {json}");
+
+            using (var client = new HttpClient())
+            {
+                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = await client.PostAsync(config.EndpointUrl + "/medkits", content);
+
+                var responseText = await response.Content.ReadAsStringAsync();
+                Logger.Info($"Uploaded player medkits usage to database. Response: {responseText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Debug($"Failed to upload player medkits usage to database: {ex}");
+        }
+
+        PlayerMedkitsUsedThisRound.Clear();
+    }
+
+    private static async void UploadColasToDatabase()
+    {
+        try
+        {
+            var config = Plugin.Instance.Config;
+            var json = JsonConvert.SerializeObject(PlayerColasUsedThisRound);
+
+            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Payload: {json}");
+
+            using (var client = new HttpClient())
+            {
+                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = await client.PostAsync(config.EndpointUrl + "/colas", content);
+
+                var responseText = await response.Content.ReadAsStringAsync();
+                Logger.Info($"Uploaded player colas usage to database. Response: {responseText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Debug($"Failed to upload player colas usage to database: {ex}");
+        }
+
+        PlayerColasUsedThisRound.Clear();
+    }
+
+    private static async void UploadAdrenalineToDatabase()
+    {
+        try
+        {
+            var config = Plugin.Instance.Config;
+            var json = JsonConvert.SerializeObject(PlayerAdrenalineUsedThisRound);
+
+            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Payload: {json}");
+
+            using (var client = new HttpClient())
+            {
+                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = await client.PostAsync(config.EndpointUrl + "/adrenaline", content);
+
+                var responseText = await response.Content.ReadAsStringAsync();
+                Logger.Info($"Uploaded player adrenaline usage to database. Response: {responseText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Debug($"Failed to upload player adrenaline usage to database: {ex}");
+        }
+
+        PlayerAdrenalineUsedThisRound.Clear();
     }
 
     private class KillRecord(string attacker, string target, int timestamp)

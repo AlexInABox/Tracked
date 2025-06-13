@@ -1,11 +1,17 @@
 import * as uploadTimes from './routes/upload/times';
 import * as uploadKills from './routes/upload/kills';
 import * as uploadRounds from './routes/upload/rounds';
+import * as uploadMedkits from './routes/upload/medkits';
+import * as uploadColas from './routes/upload/colas';
+import * as uploadAdrenaline from './routes/upload/adrenaline';
 
 const routes: Record<string, any> = {
 	'/upload/times': uploadTimes,
 	'/upload/kills': uploadKills,
-	'/upload/rounds': uploadRounds
+	'/upload/rounds': uploadRounds,
+	'/upload/medkits': uploadMedkits,
+	'/upload/colas': uploadColas,
+	'/upload/adrenaline': uploadAdrenaline
 };
 
 export default {
