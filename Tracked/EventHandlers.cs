@@ -25,6 +25,7 @@ public static class EventHandlers
     private static readonly Dictionary<string, int> PlayerMedkitsUsedThisRound = new();
     private static readonly Dictionary<string, int> PlayerColasUsedThisRound = new();
     private static readonly Dictionary<string, int> PlayerAdrenalineUsedThisRound = new();
+    private static readonly Dictionary<string, int> PlayerPocketEscapesThisRound = new();
 
     public static void RegisterEvents()
     {
@@ -34,9 +35,10 @@ public static class EventHandlers
 
         // Kill stuff
         PlayerEvents.Death += OnDeath;
-        
+
         //Events stuff
         PlayerEvents.UsedItem += OnUsedItem;
+        PlayerEvents.LeftPocketDimension += OnLeftPocketDimension;
 
         // Ending calculate conditions
         PlayerEvents.Left += OnLeft;
@@ -49,6 +51,7 @@ public static class EventHandlers
         PlayerEvents.Left -= OnLeft;
         PlayerEvents.Death -= OnDeath;
         PlayerEvents.UsedItem -= OnUsedItem;
+        PlayerEvents.LeftPocketDimension -= OnLeftPocketDimension;
         ServerEvents.RoundStarting -= OnRoundStarting;
         ServerEvents.RoundEnding -= OnRoundEnding;
     }
@@ -111,15 +114,15 @@ public static class EventHandlers
 
     private static void OnUsedItem(PlayerUsedItemEventArgs ev)
     {
-        bool isMedkit = ev.UsableItem.Type == ItemType.Medkit;
-        bool isAdrenaline = ev.UsableItem.Type == ItemType.Adrenaline;
-        bool isCola = ev.UsableItem.Type == ItemType.SCP207;
-        
+        var isMedkit = ev.UsableItem.Type == ItemType.Medkit;
+        var isAdrenaline = ev.UsableItem.Type == ItemType.Adrenaline;
+        var isCola = ev.UsableItem.Type == ItemType.SCP207;
+
         if (!isMedkit && !isAdrenaline && !isCola) return;
-        
+
         var userId = ev.Player.UserId;
         if (string.IsNullOrEmpty(userId) || ev.Player.IsDummy || ev.Player.IsHost || ev.Player.DoNotTrack) return;
-        
+
         if (isMedkit)
         {
             if (!PlayerMedkitsUsedThisRound.ContainsKey(userId))
@@ -143,6 +146,20 @@ public static class EventHandlers
         }
     }
 
+    private static void OnLeftPocketDimension(PlayerLeftPocketDimensionEventArgs ev)
+    {
+        if (!ev.IsSuccessful) return;
+
+        var userId = ev.Player.UserId;
+        if (string.IsNullOrEmpty(userId) || ev.Player.IsDummy || ev.Player.IsHost || ev.Player.DoNotTrack) return;
+
+        if (!PlayerPocketEscapesThisRound.ContainsKey(userId))
+            PlayerPocketEscapesThisRound[userId] = 0;
+        PlayerPocketEscapesThisRound[userId]++;
+        Logger.Debug(
+            $"Player {userId} successfully escaped pocket dimension. Total this round: {PlayerPocketEscapesThisRound[userId]}");
+    }
+
     private static void OnRoundStarting(RoundStartingEventArgs ev)
     {
         RoundStartTimestamp = (int)Time.time;
@@ -150,6 +167,7 @@ public static class EventHandlers
         PlayerMedkitsUsedThisRound.Clear();
         PlayerColasUsedThisRound.Clear();
         PlayerAdrenalineUsedThisRound.Clear();
+        PlayerPocketEscapesThisRound.Clear();
     }
 
     private static void OnRoundEnding(RoundEndingEventArgs ev)
@@ -182,6 +200,7 @@ public static class EventHandlers
         UploadMedkitsToDatabase();
         UploadColasToDatabase();
         UploadAdrenalineToDatabase();
+        UploadPocketEscapesToDatabase();
     }
 
     private static async void UploadTimesToDatabase()
@@ -357,6 +376,35 @@ public static class EventHandlers
         }
 
         PlayerAdrenalineUsedThisRound.Clear();
+    }
+
+    private static async void UploadPocketEscapesToDatabase()
+    {
+        try
+        {
+            var config = Plugin.Instance.Config;
+            var json = JsonConvert.SerializeObject(PlayerPocketEscapesThisRound);
+
+            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Payload: {json}");
+
+            using (var client = new HttpClient())
+            {
+                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = await client.PostAsync(config.EndpointUrl + "/pocketescapes", content);
+
+                var responseText = await response.Content.ReadAsStringAsync();
+                Logger.Info($"Uploaded player pocket escapes to database. Response: {responseText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Debug($"Failed to upload player pocket escapes to database: {ex}");
+        }
+
+        PlayerPocketEscapesThisRound.Clear();
     }
 
     private class KillRecord(string attacker, string target, int timestamp)
