@@ -6,14 +6,15 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.3" PrivateAssets="all" ExcludeAssets="runtime" ReferenceOutputAssembly="false" Private="true"/>
         <Reference Include="UnityEngine.CoreModule" HintPath="$(REFERENCES_PATH)\UnityEngine.CoreModule.dll" Private="false"/>
         <Reference Include="Assembly-CSharp" HintPath="$(REFERENCES_PATH)\Assembly-CSharp.dll" Publicize="true"/>
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.3" PrivateAssets="all" ExcludeAssets="runtime" ReferenceOutputAssembly="false" Private="true"/>
+        <PackageReference Include="ExMod.Exiled" Version="9.6.3"/>
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
-        <PackageReference Include="Northwood.LabAPI" Version="1.0.2"/>
+        <PackageReference Include="Northwood.LabAPI" Version="1.1.1"/>
         <PackageReference Include="System.Net.Http" Version="4.3.4"/>
     </ItemGroup>
 </Project>
