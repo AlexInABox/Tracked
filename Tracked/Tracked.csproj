@@ -6,13 +6,14 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Reference Include="UnityEngine.CoreModule" HintPath="$(REFERENCES_PATH)\UnityEngine.CoreModule.dll" Private="false"/>
-        <Reference Include="Assembly-CSharp" HintPath="$(REFERENCES_PATH)\Assembly-CSharp.dll" Publicize="true"/>
+        <Reference Include="UnityEngine.CoreModule" HintPath="$(EXILED_REFERENCES)\UnityEngine.CoreModule.dll" Private="false"/>
+        <Reference Include="Assembly-CSharp" HintPath="$(EXILED_REFERENCES)\Assembly-CSharp.dll" Publicize="true"/>
+        <Reference Include="SnakeAPI" HintPath="$(EXILED_REFERENCES)\SnakeAPI.dll" Publicize="false"/>
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.3" PrivateAssets="all" ExcludeAssets="runtime" ReferenceOutputAssembly="false" Private="true"/>
-        <PackageReference Include="ExMod.Exiled" Version="9.7.0"/>
+        <PackageReference Include="ExMod.Exiled" Version="9.7.2"/>
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
         <PackageReference Include="Northwood.LabAPI" Version="1.1.1"/>
         <PackageReference Include="System.Net.Http" Version="4.3.4"/>

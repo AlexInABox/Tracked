@@ -6,7 +6,7 @@ import * as uploadColas from './routes/upload/colas';
 import * as uploadAdrenaline from './routes/upload/adrenaline';
 import * as uploadPocketEscapes from './routes/upload/pocketescapes';
 import * as uploadPlayerPoints from './routes/upload/playerpoints';
-
+import * as uploadSnake from './routes/upload/snake';
 
 const routes: Record<string, any> = {
 	'/upload/times': uploadTimes,
@@ -16,7 +16,8 @@ const routes: Record<string, any> = {
 	'/upload/colas': uploadColas,
 	'/upload/adrenaline': uploadAdrenaline,
 	'/upload/pocketescapes': uploadPocketEscapes,
-	'/upload/playerpoints': uploadPlayerPoints
+	'/upload/playerpoints': uploadPlayerPoints,
+	'/upload/snake': uploadSnake,
 };
 
 export default {
@@ -25,17 +26,15 @@ export default {
 		const route = routes[url.pathname];
 
 		if (!route) {
-			return new Response("Not found", { status: 404 });
+			return new Response('Not found', { status: 404 });
 		}
 
-		const handler =
-			route[`onRequest${request.method.charAt(0).toUpperCase() + request.method.slice(1).toLowerCase()}`] ||
-			route.onRequest;
+		const handler = route[`onRequest${request.method.charAt(0).toUpperCase() + request.method.slice(1).toLowerCase()}`] || route.onRequest;
 
 		if (!handler) {
-			return new Response("Method not allowed", { status: 405 });
+			return new Response('Method not allowed', { status: 405 });
 		}
 
 		return handler(request, env, ctx);
-	}
+	},
 };

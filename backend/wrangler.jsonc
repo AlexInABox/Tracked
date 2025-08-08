@@ -8,12 +8,12 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2025-06-04",
 	"observability": {
-		"enabled": true
+		"enabled": true,
 	},
 	"d1_databases": [
 		{
 			"binding": "zeitvertreib-data",
-			"database_id": "a5642ecc-9382-4256-924d-8353a825c26b"
+			"database_id": "a5642ecc-9382-4256-924d-8353a825c26b",
 		},
 	],
 	/**

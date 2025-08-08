@@ -11,6 +11,7 @@ using LabApi.Events.Arguments.ServerEvents;
 using LabApi.Events.Handlers;
 using LabApi.Features.Wrappers;
 using Newtonsoft.Json;
+using SnakeAPI.API;
 using UnityEngine;
 using Logger = LabApi.Features.Console.Logger;
 
@@ -31,6 +32,7 @@ public static class EventHandlers
     private static readonly Dictionary<string, int> PlayerAdrenalineUsedThisRound = new();
     private static readonly Dictionary<string, int> PlayerPocketEscapesThisRound = new();
     private static readonly Dictionary<string, int> PlayerPointsThisRound = new();
+    private static readonly Dictionary<string, int> PlayerSnakeScoresThisRound = new();
 
     private static IPlugin<IConfig> RoundReportsPlugin;
     private static Assembly RoundReportsAssembly;
@@ -53,6 +55,9 @@ public static class EventHandlers
         // Ending calculate conditions
         PlayerEvents.Left += OnLeft;
         ServerEvents.RoundEnding += OnRoundEnding;
+
+        //Snake fun
+        SnakeEvents.SnakeLost += OnSnakeGameFinished;
     }
 
     public static void UnregisterEvents()
@@ -64,6 +69,7 @@ public static class EventHandlers
         PlayerEvents.LeftPocketDimension -= OnLeftPocketDimension;
         ServerEvents.RoundStarting -= OnRoundStarting;
         ServerEvents.RoundEnding -= OnRoundEnding;
+        SnakeEvents.SnakeLost -= OnSnakeGameFinished;
     }
 
     private static void OnJoined(PlayerJoinedEventArgs ev)
@@ -172,6 +178,21 @@ public static class EventHandlers
             $"Player {userId} successfully escaped pocket dimension. Total this round: {PlayerPocketEscapesThisRound[userId]}");
     }
 
+    private static void OnSnakeGameFinished(Player player, int score)
+    {
+        if (player.IsDummy || player.IsHost || player.DoNotTrack) return;
+
+        string userId = player.UserId;
+        if (string.IsNullOrEmpty(userId)) return; //HATE. LET ME TELL YOU HOW MUCH I'VE COME TO HATE LABAPI!!
+
+        if (!PlayerSnakeScoresThisRound.ContainsKey(userId))
+            PlayerSnakeScoresThisRound[userId] = 0;
+
+        PlayerSnakeScoresThisRound[userId] = Math.Max(PlayerSnakeScoresThisRound[userId], score);
+        Logger.Debug(
+            $"Player {userId} finished snake game with score: {score}. Total this round: {PlayerSnakeScoresThisRound[userId]}");
+    }
+
     private static void OnRoundStarting(RoundStartingEventArgs ev)
     {
         _roundStartTimestamp = (int)Time.time;
@@ -225,6 +246,7 @@ public static class EventHandlers
         UploadAdrenalineToDatabase();
         UploadPocketEscapesToDatabase();
         UploadPlayerPointsToDatabase();
+        UploadSnakeScoresToDatabase();
     }
 
     private static async void UploadTimesToDatabase()
@@ -458,6 +480,36 @@ public static class EventHandlers
         }
 
         PlayerPocketEscapesThisRound.Clear();
+    }
+
+
+    private static async void UploadSnakeScoresToDatabase()
+    {
+        try
+        {
+            Config config = Plugin.Instance.Config;
+            string json = JsonConvert.SerializeObject(PlayerSnakeScoresThisRound);
+
+            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Payload: {json}");
+
+            using (HttpClient client = new())
+            {
+                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+
+                StringContent content = new(json, Encoding.UTF8, "application/json");
+                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/snake", content);
+
+                string responseText = await response.Content.ReadAsStringAsync();
+                Logger.Info($"Uploaded SnakeScore to database. Response: {responseText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Debug($"Failed to upload SnakeScore to database: {ex}");
+        }
+
+        PlayerSnakeScoresThisRound.Clear();
     }
 
     private static int GetPointsOfPlayer(Player player)
