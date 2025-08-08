@@ -1,0 +1,88 @@
+name: Build and DEV Release
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+env:
+  REFERENCES_URL: https://dev.zeitvertreib.vip/assets/buildtools/scpsl-references.zip
+  EXILED_REFERENCES: ${{ github.workspace }}/References
+  AUDIO_PLAYER_API_URL: https://github.com/Killers0992/AudioPlayerApi/releases/download/1.0.9/dependencies.zip
+
+jobs:
+  build:
+    name: 🛠️ Build Project
+    runs-on: windows-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Restore NuGet packages
+        run: nuget restore
+
+      - name: 📦 Download dependencies
+        shell: pwsh
+        run: |
+          # Download and extract EXILED references
+          Invoke-WebRequest -Uri $env:REFERENCES_URL -OutFile "$env:GITHUB_WORKSPACE/Dev.zip" -ErrorAction Stop
+          Expand-Archive -Path "$env:GITHUB_WORKSPACE/Dev.zip" -DestinationPath $env:EXILED_REFERENCES
+
+          # Download and extract Audio Player API
+          Invoke-WebRequest -Uri $env:AUDIO_PLAYER_API_URL -OutFile "$env:GITHUB_WORKSPACE/AudioPlayerApi.zip" -ErrorAction Stop
+          Expand-Archive -Path "$env:GITHUB_WORKSPACE/AudioPlayerApi.zip" -DestinationPath "$env:GITHUB_WORKSPACE/AudioPlayerApi"
+
+          # Copy DLLs without overwriting
+          Get-ChildItem -Path "$env:GITHUB_WORKSPACE/AudioPlayerApi/dependencies" -Filter *.dll | ForEach-Object {
+            $target = Join-Path -Path $env:EXILED_REFERENCES -ChildPath $_.Name
+            if (-Not (Test-Path $target)) {
+              Copy-Item -Path $_.FullName -Destination $target
+            }
+          }
+
+      - name: 🧱 Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: 🏗️ Build the DLL
+        run: |
+          msbuild Tracked\Tracked.csproj -t:rebuild -property:Configuration=Release -property:ReferencePath="${{ env.EXILED_REFERENCES }}"
+
+      - name: 📤 Upload built DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tracked
+          path: Tracked/bin/Release/net4.8.1/Tracked.dll
+
+  release:
+    name: 🚀 Create DEV Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏷️ Extract version from Plugin.cs
+        id: get_version
+        run: |
+          VERSION=$(grep -Po '=\s*new\s*\(\K[0-9]+,\s*[0-9]+,\s*[0-9]+' Tracked/Plugin.cs | head -n1 | tr -d ' ' | tr ',' '.')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: 📦 Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Tracked
+          path: artifact
+
+      - name: 🚀 Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}-dev
+          name: v${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: true
+          files: artifact/Tracked.dll
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

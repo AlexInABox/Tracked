@@ -1,0 +1,79 @@
+name: Build and Draft Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REFERENCES_URL: https://dev.zeitvertreib.vip/assets/buildtools/scpsl-references.zip
+  EXILED_REFERENCES: ${{ github.workspace }}/References
+  SNAKE_API_DLL_URL: https://s3.sr.ht/builds.sr.ht/artifacts/~furry/1546053/1734f84d467bcf19/SnakeAPI.dll
+
+jobs:
+  build:
+    name: 🛠️ Build Project
+    runs-on: windows-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Restore NuGet packages
+        run: nuget restore
+
+      - name: 📦 Download dependencies
+        shell: pwsh
+        run: |
+          # Download and extract EXILED references
+          Invoke-WebRequest -Uri $env:REFERENCES_URL -OutFile "$env:GITHUB_WORKSPACE/Dev.zip" -ErrorAction Stop
+          Expand-Archive -Path "$env:GITHUB_WORKSPACE/Dev.zip" -DestinationPath $env:EXILED_REFERENCES
+
+          # Download SnakeAPI.dll directly into EXILED_REFERENCES
+          Invoke-WebRequest -Uri $env:SNAKE_API_DLL_URL -OutFile (Join-Path $env:EXILED_REFERENCES "SnakeAPI.dll") -ErrorAction Stop
+
+      - name: 🧱 Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: 🏗️ Build the DLL
+        run: |
+          msbuild Tracked\Tracked.csproj -t:rebuild -property:Configuration=Release -property:ReferencePath="${{ env.EXILED_REFERENCES }}"
+
+      - name: 📤 Upload built DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tracked
+          path: Tracked/bin/Release/net4.8.1/Tracked.dll
+
+  release:
+    name: 📝 Draft Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏷️ Extract version from Plugin.cs
+        id: get_version
+        run: |
+          VERSION=$(grep -Po '=\s*new\s*\(\K[0-9]+,\s*[0-9]+,\s*[0-9]+' Tracked/Plugin.cs | head -n1 | tr -d ' ' | tr ',' '.')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: 📦 Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Tracked
+          path: artifact
+
+      - name: 📝 Create Draft GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: v${{ steps.get_version.outputs.version }}
+          draft: true
+          prerelease: false
+          files: artifact/Tracked.dll
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
