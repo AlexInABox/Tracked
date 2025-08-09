@@ -7,6 +7,7 @@ import * as uploadAdrenaline from './routes/upload/adrenaline';
 import * as uploadPocketEscapes from './routes/upload/pocketescapes';
 import * as uploadPlayerPoints from './routes/upload/playerpoints';
 import * as uploadSnake from './routes/upload/snake';
+import * as uploadFakeRankAllowed from './routes/upload/fakerankallowed';
 
 const routes: Record<string, any> = {
 	'/upload/times': uploadTimes,
@@ -18,6 +19,7 @@ const routes: Record<string, any> = {
 	'/upload/pocketescapes': uploadPocketEscapes,
 	'/upload/playerpoints': uploadPlayerPoints,
 	'/upload/snake': uploadSnake,
+	'/upload/fakerankallowed': uploadFakeRankAllowed,
 };
 
 export default {

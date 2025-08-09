@@ -9,6 +9,7 @@ using Exiled.Loader;
 using LabApi.Events.Arguments.PlayerEvents;
 using LabApi.Events.Arguments.ServerEvents;
 using LabApi.Events.Handlers;
+using LabApi.Features.Permissions;
 using LabApi.Features.Wrappers;
 using Newtonsoft.Json;
 using SnakeAPI.API;
@@ -33,6 +34,7 @@ public static class EventHandlers
     private static readonly Dictionary<string, int> PlayerPocketEscapesThisRound = new();
     private static readonly Dictionary<string, int> PlayerPointsThisRound = new();
     private static readonly Dictionary<string, int> PlayerSnakeScoresThisRound = new();
+    private static readonly Dictionary<string, bool> FakeRankAllowed = new();
 
     private static IPlugin<IConfig> RoundReportsPlugin;
     private static Assembly RoundReportsAssembly;
@@ -83,6 +85,9 @@ public static class EventHandlers
 
         if (!PlayerTimePlayedThisRound.ContainsKey(userId)) PlayerTimePlayedThisRound[userId] = 0;
         if (!PlayerRoundsPlayedThisRound.ContainsKey(userId)) PlayerRoundsPlayedThisRound[userId] = 0;
+
+        //Check if the player is allowed to use fake rank
+        FakeRankAllowed[ev.Player.UserId] = ev.Player.HasPermissions("fakerank");
     }
 
     private static void OnLeft(PlayerLeftEventArgs ev)
@@ -247,6 +252,7 @@ public static class EventHandlers
         UploadPocketEscapesToDatabase();
         UploadPlayerPointsToDatabase();
         UploadSnakeScoresToDatabase();
+        UploadFakeRankAllowedToDatabase();
     }
 
     private static async void UploadTimesToDatabase()
@@ -510,6 +516,35 @@ public static class EventHandlers
         }
 
         PlayerSnakeScoresThisRound.Clear();
+    }
+
+    private static async void UploadFakeRankAllowedToDatabase()
+    {
+        try
+        {
+            Config config = Plugin.Instance.Config;
+            string json = JsonConvert.SerializeObject(FakeRankAllowed);
+
+            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Payload: {json}");
+
+            using (HttpClient client = new())
+            {
+                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+
+                StringContent content = new(json, Encoding.UTF8, "application/json");
+                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/fakerankallowed", content);
+
+                string responseText = await response.Content.ReadAsStringAsync();
+                Logger.Info($"Uploaded FakeRankAllowed to database. Response: {responseText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Debug($"Failed to upload FakeRankAllowed to database: {ex}");
+        }
+
+        FakeRankAllowed.Clear();
     }
 
     private static int GetPointsOfPlayer(Player player)
