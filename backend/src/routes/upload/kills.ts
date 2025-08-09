@@ -33,15 +33,38 @@ export async function onRequestPost(request: Request, env: Env, ctx: ExecutionCo
 			}
 		}
 
-		// Insert kill records into database
+		// Insert kill records into database and update player stats
 		for (const kill of requestData) {
+			// Insert kill record
 			await env['zeitvertreib-data']
 				.prepare(`INSERT INTO kills (attacker, target, timestamp) VALUES (?, ?, ?)`)
 				.bind(kill.Attacker, kill.Target, kill.Timestamp)
 				.run();
+
+			// Update attacker's kill count (ignore anonymous attackers)
+			if (kill.Attacker && kill.Attacker.toLowerCase() !== 'anonymous' && kill.Attacker.trim() !== '') {
+				await env['zeitvertreib-data']
+					.prepare(
+						`INSERT INTO playerdata (id, killcount) VALUES (?, ?) 
+                         ON CONFLICT(id) DO UPDATE SET killcount = COALESCE(killcount, 0) + ?`,
+					)
+					.bind(kill.Attacker, 1, 1)
+					.run();
+			}
+
+			// Update target's death count
+			if (kill.Target && kill.Target.trim() !== '') {
+				await env['zeitvertreib-data']
+					.prepare(
+						`INSERT INTO playerdata (id, deathcount) VALUES (?, ?) 
+                         ON CONFLICT(id) DO UPDATE SET deathcount = COALESCE(deathcount, 0) + ?`,
+					)
+					.bind(kill.Target, 1, 1)
+					.run();
+			}
 		}
 
-		return Response.json({ success: true, message: 'Kill data inserted successfully' });
+		return Response.json({ success: true, message: 'Kill data and player stats updated successfully' });
 	} catch (error) {
 		console.error('Upload kills POST error:', error);
 		if (error instanceof SyntaxError) {
