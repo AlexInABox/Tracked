@@ -35,6 +35,7 @@ public static class EventHandlers
     private static readonly Dictionary<string, int> PlayerPointsThisRound = new();
     private static readonly Dictionary<string, int> PlayerSnakeScoresThisRound = new();
     private static readonly Dictionary<string, bool> FakeRankAllowed = new();
+    private static readonly Dictionary<string, bool> FakeRankAdmin = new();
 
     private static IPlugin<IConfig> RoundReportsPlugin;
     private static Assembly RoundReportsAssembly;
@@ -88,6 +89,8 @@ public static class EventHandlers
 
         //Check if the player is allowed to use fake rank
         FakeRankAllowed[ev.Player.UserId] = ev.Player.HasPermissions("fakerank");
+        
+        FakeRankAdmin[ev.Player.UserId] = ev.Player.HasPermissions("fakerank.admin");
     }
 
     private static void OnLeft(PlayerLeftEventArgs ev)
@@ -253,6 +256,7 @@ public static class EventHandlers
         UploadPlayerPointsToDatabase();
         UploadSnakeScoresToDatabase();
         UploadFakeRankAllowedToDatabase();
+        UploadFakeRankAdminToDatabase();
     }
 
     private static async void UploadTimesToDatabase()
@@ -542,6 +546,35 @@ public static class EventHandlers
         catch (Exception ex)
         {
             Logger.Debug($"Failed to upload FakeRankAllowed to database: {ex}");
+        }
+
+        FakeRankAllowed.Clear();
+    }
+    
+    private static async void UploadFakeRankAdminToDatabase()
+    {
+        try
+        {
+            Config config = Plugin.Instance.Config;
+            string json = JsonConvert.SerializeObject(FakeRankAdmin);
+
+            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Payload: {json}");
+
+            using (HttpClient client = new())
+            {
+                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+
+                StringContent content = new(json, Encoding.UTF8, "application/json");
+                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/fakerankadmin", content);
+
+                string responseText = await response.Content.ReadAsStringAsync();
+                Logger.Info($"Uploaded FakeRankAdmin to database. Response: {responseText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Debug($"Failed to upload FakeRankAdmin to database: {ex}");
         }
 
         FakeRankAllowed.Clear();
