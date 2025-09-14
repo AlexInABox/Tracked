@@ -19,20 +19,35 @@ export async function onRequestPost(request: Request, env: Env, ctx: ExecutionCo
             }
         }
 
-        // Update fakerankallowed in database for each steamid
+        // Calculate timestamp for 14 days from now
+        const fourteenDaysFromNow = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);
+
+        // Update fakerank_until in database for each steamid (only grant permissions, never revoke)
         for (const [steamid, value] of Object.entries(requestData)) {
-            await env['zeitvertreib-data']
-                .prepare(
-                    `INSERT INTO playerdata (id, fakerankallowed) VALUES (?, ?) 
-                         ON CONFLICT(id) DO UPDATE SET fakerankallowed = ?`,
-                )
-                .bind(steamid, value, value)
-                .run();
+            if (value) {
+                // If granting fakerank permissions, check current timestamp and set to 14 days from now if needed
+                const currentPlayer = await env['zeitvertreib-data']
+                    .prepare(`SELECT fakerank_until FROM playerdata WHERE id = ?`)
+                    .bind(steamid)
+                    .first();
+
+                const currentTimestamp = (currentPlayer?.fakerank_until as number) || 0;
+                const newTimestamp = Math.max(currentTimestamp, fourteenDaysFromNow);
+
+                await env['zeitvertreib-data']
+                    .prepare(
+                        `INSERT INTO playerdata (id, fakerank_until) VALUES (?, ?) 
+                         ON CONFLICT(id) DO UPDATE SET fakerank_until = ?`,
+                    )
+                    .bind(steamid, newTimestamp, newTimestamp)
+                    .run();
+            }
+            // Note: No revocation logic - fakerank permissions are never removed via this endpoint
         }
 
         return Response.json({
             success: true,
-            message: `Fake rank allowed status updated successfully for ${Object.keys(requestData).length} player(s)`,
+            message: `Fake rank permissions updated successfully for ${Object.keys(requestData).length} player(s)`,
             updated_data: requestData
         });
     } catch (error) {
