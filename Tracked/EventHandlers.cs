@@ -11,6 +11,7 @@ using LabApi.Events.Arguments.ServerEvents;
 using LabApi.Events.Handlers;
 using LabApi.Features.Permissions;
 using LabApi.Features.Wrappers;
+using LabApi.Loader;
 using Newtonsoft.Json;
 using SnakeAPI.API;
 using UnityEngine;
@@ -20,6 +21,9 @@ namespace Tracked;
 
 public static class EventHandlers
 {
+    //Globals for this file
+    private static readonly Config Config = Plugin.Instance.Config!;
+
     //Helper dictionaries
     private static readonly Dictionary<string, int> PlayerStartingTimestamps = new();
     private static int _roundStartTimestamp;
@@ -37,10 +41,11 @@ public static class EventHandlers
     private static readonly Dictionary<string, bool> FakeRankAllowed = new();
     private static readonly Dictionary<string, bool> FakeRankAdmin = new();
 
-    private static IPlugin<IConfig> RoundReportsPlugin;
-    private static Assembly RoundReportsAssembly;
-    private static bool FoundRoundReports;
-    private static Type RoundReportsApi;
+    //RoundReports references
+    private static IPlugin<IConfig> _roundReportsPlugin;
+    private static Assembly _roundReportsAssembly;
+    private static bool _foundRoundReports;
+    private static Type _roundReportsApi;
 
     public static void RegisterEvents()
     {
@@ -61,6 +66,9 @@ public static class EventHandlers
 
         //Snake fun
         SnakeEvents.SnakeLost += OnSnakeGameFinished;
+
+        //Map stuff
+        ServerEvents.MapGenerated += OnMapGenerated;
     }
 
     public static void UnregisterEvents()
@@ -73,14 +81,15 @@ public static class EventHandlers
         ServerEvents.RoundStarting -= OnRoundStarting;
         ServerEvents.RoundEnding -= OnRoundEnding;
         SnakeEvents.SnakeLost -= OnSnakeGameFinished;
+        ServerEvents.MapGenerated -= OnMapGenerated;
     }
 
     private static void OnJoined(PlayerJoinedEventArgs ev)
     {
         if (ev.Player.IsDummy || ev.Player.IsHost || ev.Player.DoNotTrack) return;
 
-        string userId = ev.Player.UserId;
-        int timestamp = (int)Time.time;
+        var userId = ev.Player.UserId;
+        var timestamp = (int)Time.time;
 
         PlayerStartingTimestamps[userId] = timestamp;
 
@@ -89,7 +98,7 @@ public static class EventHandlers
 
         //Check if the player is allowed to use fake rank
         FakeRankAllowed[ev.Player.UserId] = ev.Player.HasPermissions("fakerank");
-        
+
         FakeRankAdmin[ev.Player.UserId] = ev.Player.HasPermissions("fakerank.admin");
     }
 
@@ -97,8 +106,8 @@ public static class EventHandlers
     {
         if (ev.Player.IsDummy || ev.Player.IsHost || ev.Player.DoNotTrack) return;
 
-        string userId = ev.Player.UserId;
-        int timestamp = (int)Time.time;
+        var userId = ev.Player.UserId;
+        var timestamp = (int)Time.time;
 
         if (!PlayerStartingTimestamps.ContainsKey(userId)) return;
 
@@ -113,7 +122,7 @@ public static class EventHandlers
         if (ev.Player.IsDummy || ev.Player.IsHost) return;
 
         // Check if ServerLogsText contains "unknown" (any spelling) - indicates disconnect, should not be counted
-        string serverLogsText = ev.DamageHandler.ServerLogsText;
+        var serverLogsText = ev.DamageHandler.ServerLogsText;
         if (string.IsNullOrEmpty(serverLogsText) ||
             serverLogsText.ToLower().Contains("unknown"))
         {
@@ -121,9 +130,9 @@ public static class EventHandlers
             return;
         }
 
-        int timestamp = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds(); //epoch
-        string targetId = "anonymous";
-        string attackerId = "anonymous";
+        var timestamp = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds(); //epoch
+        var targetId = "anonymous";
+        var attackerId = "anonymous";
 
         if (!ev.Player.DoNotTrack) targetId = ev.Player.UserId;
         if (ev.Attacker != null && !ev.Attacker.DoNotTrack && !ev.Attacker.IsHost && !ev.Attacker.IsDummy)
@@ -140,13 +149,13 @@ public static class EventHandlers
 
     private static void OnUsedItem(PlayerUsedItemEventArgs ev)
     {
-        bool isMedkit = ev.UsableItem.Type == ItemType.Medkit;
-        bool isAdrenaline = ev.UsableItem.Type == ItemType.Adrenaline;
-        bool isCola = ev.UsableItem.Type == ItemType.SCP207;
+        var isMedkit = ev.UsableItem.Type == ItemType.Medkit;
+        var isAdrenaline = ev.UsableItem.Type == ItemType.Adrenaline;
+        var isCola = ev.UsableItem.Type == ItemType.SCP207;
 
         if (!isMedkit && !isAdrenaline && !isCola) return;
 
-        string userId = ev.Player.UserId;
+        var userId = ev.Player.UserId;
         if (string.IsNullOrEmpty(userId) || ev.Player.IsDummy || ev.Player.IsHost || ev.Player.DoNotTrack) return;
 
         if (isMedkit)
@@ -163,7 +172,7 @@ public static class EventHandlers
             PlayerColasUsedThisRound[userId]++;
             Logger.Debug($"Player {userId} used a cola. Total this round: {PlayerColasUsedThisRound[userId]}");
         }
-        else if (isAdrenaline)
+        else
         {
             if (!PlayerAdrenalineUsedThisRound.ContainsKey(userId))
                 PlayerAdrenalineUsedThisRound[userId] = 0;
@@ -176,7 +185,7 @@ public static class EventHandlers
     {
         if (!ev.IsSuccessful) return;
 
-        string userId = ev.Player.UserId;
+        var userId = ev.Player.UserId;
         if (string.IsNullOrEmpty(userId) || ev.Player.IsDummy || ev.Player.IsHost || ev.Player.DoNotTrack) return;
 
         if (!PlayerPocketEscapesThisRound.ContainsKey(userId))
@@ -190,7 +199,7 @@ public static class EventHandlers
     {
         if (player.IsDummy || player.IsHost || player.DoNotTrack) return;
 
-        string userId = player.UserId;
+        var userId = player.UserId;
         if (string.IsNullOrEmpty(userId)) return; //HATE. LET ME TELL YOU HOW MUCH I'VE COME TO HATE LABAPI!!
 
         if (!PlayerSnakeScoresThisRound.ContainsKey(userId))
@@ -199,6 +208,21 @@ public static class EventHandlers
         PlayerSnakeScoresThisRound[userId] = Math.Max(PlayerSnakeScoresThisRound[userId], score);
         Logger.Debug(
             $"Player {userId} finished snake game with score: {score}. Total this round: {PlayerSnakeScoresThisRound[userId]}");
+    }
+
+    private static void OnMapGenerated(MapGeneratedEventArgs ev)
+    {
+        List<TrackedRoom> map = [];
+        foreach (var room in Map.Rooms)
+            map.Add(new TrackedRoom
+            {
+                Name = room.Name.ToString(), Shape = room.Shape.ToString(), X = (int)Math.Round(room.Position.x),
+                Y = (int)Math.Round(room.Position.y), Z = (int)Math.Round(room.Position.z)
+            });
+
+        FileManager.WriteStringToFile(JsonConvert.SerializeObject(map, Formatting.Indented),
+            Plugin.Instance.GetConfigPath(Plugin.Instance.ConfigFileName).Replace(Plugin.Instance.ConfigFileName, "") +
+            "map.json");
     }
 
     private static void OnRoundStarting(RoundStartingEventArgs ev)
@@ -216,15 +240,15 @@ public static class EventHandlers
 
     private static void OnRoundEnding(RoundEndingEventArgs ev)
     {
-        int endTimestamp = (int)Time.time;
-        int roundDuration = endTimestamp - _roundStartTimestamp;
-        double minimumTimeForRound = roundDuration * 0.8; // 80% of round duration
+        var endTimestamp = (int)Time.time;
+        var roundDuration = endTimestamp - _roundStartTimestamp;
+        var minimumTimeForRound = roundDuration * 0.8; // 80% of round duration
 
-        foreach (Player player in Player.List)
+        foreach (var player in Player.List)
         {
             if (player.IsDummy || player.IsHost || player.DoNotTrack) continue;
 
-            string userId = player.UserId;
+            var userId = player.UserId;
 
             if (string.IsNullOrEmpty(userId)) continue; //HATE. LET ME TELL YOU HOW MUCH I'VE COME TO HATE LABAPI!!
 
@@ -237,10 +261,10 @@ public static class EventHandlers
                 PlayerRoundsPlayedThisRound[userId] = 1; // Player gets 1 round played
         }
 
-        foreach (Player player in Player.List)
+        foreach (var player in Player.List)
         {
             if (player.IsDummy || player.IsHost || player.DoNotTrack) continue;
-            string userId = player.UserId;
+            var userId = player.UserId;
 
             if (string.IsNullOrEmpty(userId)) continue; //HATE. LET ME TELL YOU HOW MUCH I'VE COME TO HATE LABAPI!!
             PlayerPointsThisRound[userId] = GetPointsOfPlayer(player);
@@ -263,8 +287,8 @@ public static class EventHandlers
     {
         try
         {
-            Config config = Plugin.Instance.Config;
-            string json = JsonConvert.SerializeObject(PlayerTimePlayedThisRound);
+            var config = Plugin.Instance.Config!;
+            var json = JsonConvert.SerializeObject(PlayerTimePlayedThisRound);
 
             Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
             Logger.Debug($"Payload: {json}");
@@ -274,9 +298,9 @@ public static class EventHandlers
                 client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/times", content);
+                var response = await client.PostAsync(config.EndpointUrl + "/times", content);
 
-                string responseText = await response.Content.ReadAsStringAsync();
+                var responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded player times to database. Response: {responseText}");
             }
         }
@@ -293,20 +317,19 @@ public static class EventHandlers
     {
         try
         {
-            Config config = Plugin.Instance.Config;
-            string json = JsonConvert.SerializeObject(KillsThisRound);
+            var json = JsonConvert.SerializeObject(KillsThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
             Logger.Debug($"Payload: {json}");
 
             using (HttpClient client = new())
             {
-                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+                client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/kills", content);
+                var response = await client.PostAsync(Config.EndpointUrl + "/kills", content);
 
-                string responseText = await response.Content.ReadAsStringAsync();
+                var responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded player kills to database. Response: {responseText}");
             }
         }
@@ -322,20 +345,19 @@ public static class EventHandlers
     {
         try
         {
-            Config config = Plugin.Instance.Config;
-            string json = JsonConvert.SerializeObject(PlayerRoundsPlayedThisRound);
+            var json = JsonConvert.SerializeObject(PlayerRoundsPlayedThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
             Logger.Debug($"Payload: {json}");
 
             using (HttpClient client = new())
             {
-                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+                client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/rounds", content);
+                var response = await client.PostAsync(Config.EndpointUrl + "/rounds", content);
 
-                string responseText = await response.Content.ReadAsStringAsync();
+                var responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded player rounds to database. Response: {responseText}");
             }
         }
@@ -351,20 +373,19 @@ public static class EventHandlers
     {
         try
         {
-            Config config = Plugin.Instance.Config;
-            string json = JsonConvert.SerializeObject(PlayerMedkitsUsedThisRound);
+            var json = JsonConvert.SerializeObject(PlayerMedkitsUsedThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
             Logger.Debug($"Payload: {json}");
 
             using (HttpClient client = new())
             {
-                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+                client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/medkits", content);
+                var response = await client.PostAsync(Config.EndpointUrl + "/medkits", content);
 
-                string responseText = await response.Content.ReadAsStringAsync();
+                var responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded player medkits usage to database. Response: {responseText}");
             }
         }
@@ -380,20 +401,19 @@ public static class EventHandlers
     {
         try
         {
-            Config config = Plugin.Instance.Config;
-            string json = JsonConvert.SerializeObject(PlayerColasUsedThisRound);
+            var json = JsonConvert.SerializeObject(PlayerColasUsedThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
             Logger.Debug($"Payload: {json}");
 
             using (HttpClient client = new())
             {
-                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+                client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/colas", content);
+                var response = await client.PostAsync(Config.EndpointUrl + "/colas", content);
 
-                string responseText = await response.Content.ReadAsStringAsync();
+                var responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded player colas usage to database. Response: {responseText}");
             }
         }
@@ -409,20 +429,19 @@ public static class EventHandlers
     {
         try
         {
-            Config config = Plugin.Instance.Config;
-            string json = JsonConvert.SerializeObject(PlayerAdrenalineUsedThisRound);
+            var json = JsonConvert.SerializeObject(PlayerAdrenalineUsedThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
             Logger.Debug($"Payload: {json}");
 
             using (HttpClient client = new())
             {
-                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+                client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/adrenaline", content);
+                var response = await client.PostAsync(Config.EndpointUrl + "/adrenaline", content);
 
-                string responseText = await response.Content.ReadAsStringAsync();
+                var responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded player adrenaline usage to database. Response: {responseText}");
             }
         }
@@ -438,20 +457,19 @@ public static class EventHandlers
     {
         try
         {
-            Config config = Plugin.Instance.Config;
-            string json = JsonConvert.SerializeObject(PlayerPocketEscapesThisRound);
+            var json = JsonConvert.SerializeObject(PlayerPocketEscapesThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
             Logger.Debug($"Payload: {json}");
 
             using (HttpClient client = new())
             {
-                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+                client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/pocketescapes", content);
+                var response = await client.PostAsync(Config.EndpointUrl + "/pocketescapes", content);
 
-                string responseText = await response.Content.ReadAsStringAsync();
+                var responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded player pocket escapes to database. Response: {responseText}");
             }
         }
@@ -467,20 +485,19 @@ public static class EventHandlers
     {
         try
         {
-            Config config = Plugin.Instance.Config;
-            string json = JsonConvert.SerializeObject(PlayerPointsThisRound);
+            var json = JsonConvert.SerializeObject(PlayerPointsThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
             Logger.Debug($"Payload: {json}");
 
             using (HttpClient client = new())
             {
-                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+                client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/playerpoints", content);
+                var response = await client.PostAsync(Config.EndpointUrl + "/playerpoints", content);
 
-                string responseText = await response.Content.ReadAsStringAsync();
+                var responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded XP to database. Response: {responseText}");
             }
         }
@@ -497,20 +514,19 @@ public static class EventHandlers
     {
         try
         {
-            Config config = Plugin.Instance.Config;
-            string json = JsonConvert.SerializeObject(PlayerSnakeScoresThisRound);
+            var json = JsonConvert.SerializeObject(PlayerSnakeScoresThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
             Logger.Debug($"Payload: {json}");
 
             using (HttpClient client = new())
             {
-                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+                client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/snake", content);
+                var response = await client.PostAsync(Config.EndpointUrl + "/snake", content);
 
-                string responseText = await response.Content.ReadAsStringAsync();
+                var responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded SnakeScore to database. Response: {responseText}");
             }
         }
@@ -526,20 +542,19 @@ public static class EventHandlers
     {
         try
         {
-            Config config = Plugin.Instance.Config;
-            string json = JsonConvert.SerializeObject(FakeRankAllowed);
+            var json = JsonConvert.SerializeObject(FakeRankAllowed);
 
-            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
             Logger.Debug($"Payload: {json}");
 
             using (HttpClient client = new())
             {
-                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+                client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/fakerankallowed", content);
+                var response = await client.PostAsync(Config.EndpointUrl + "/fakerankallowed", content);
 
-                string responseText = await response.Content.ReadAsStringAsync();
+                var responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded FakeRankAllowed to database. Response: {responseText}");
             }
         }
@@ -550,25 +565,24 @@ public static class EventHandlers
 
         FakeRankAllowed.Clear();
     }
-    
+
     private static async void UploadFakeRankAdminToDatabase()
     {
         try
         {
-            Config config = Plugin.Instance.Config;
-            string json = JsonConvert.SerializeObject(FakeRankAdmin);
+            var json = JsonConvert.SerializeObject(FakeRankAdmin);
 
-            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
             Logger.Debug($"Payload: {json}");
 
             using (HttpClient client = new())
             {
-                client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
+                client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/fakerankadmin", content);
+                var response = await client.PostAsync(Config.EndpointUrl + "/fakerankadmin", content);
 
-                string responseText = await response.Content.ReadAsStringAsync();
+                var responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded FakeRankAdmin to database. Response: {responseText}");
             }
         }
@@ -582,11 +596,11 @@ public static class EventHandlers
 
     private static int GetPointsOfPlayer(Player player)
     {
-        if (!FoundRoundReports || RoundReportsApi == null) return 0;
+        if (!_foundRoundReports || _roundReportsApi == null) return 0;
         if (player == null || player.IsDummy || player.IsHost || player.DoNotTrack) return 0;
 
-        int points = 0;
-        points = (int)RoundReportsApi.GetMethod("GetPointsOfPlayer")?.Invoke(null, [player.PlayerId])!;
+        var points = 0;
+        points = (int)_roundReportsApi.GetMethod("GetPointsOfPlayer")?.Invoke(null, [player.PlayerId])!;
 
         Logger.Info("GetPointsOfPlayer called for player: " + player.DisplayName + ", points: " + points);
         return points;
@@ -594,12 +608,12 @@ public static class EventHandlers
 
     private static void ConnectToRoundReports()
     {
-        RoundReportsPlugin = Loader.Plugins.FirstOrDefault(plugin => plugin.Assembly.GetName().Name == "RoundReports");
-        RoundReportsAssembly = RoundReportsPlugin?.Assembly ?? null;
-        FoundRoundReports = RoundReportsAssembly is not null;
-        RoundReportsApi = RoundReportsAssembly?.GetType("RoundReports.API.RoundReports");
+        _roundReportsPlugin = Loader.Plugins.FirstOrDefault(plugin => plugin.Assembly.GetName().Name == "RoundReports");
+        _roundReportsAssembly = _roundReportsPlugin?.Assembly ?? null;
+        _foundRoundReports = _roundReportsAssembly is not null;
+        _roundReportsApi = _roundReportsAssembly?.GetType("RoundReports.API.RoundReports");
 
-        if (FoundRoundReports && RoundReportsApi != null)
+        if (_foundRoundReports && _roundReportsApi != null)
             Logger.Info("Connected to RoundReports API successfully.");
         else
             Logger.Warn("RoundReports API not found or failed to connect.");
@@ -611,4 +625,17 @@ public static class EventHandlers
         public string Target { get; set; } = target;
         public int Timestamp { get; set; } = timestamp;
     }
+}
+
+public class TrackedRoom
+{
+    [JsonProperty("name")] public string Name { get; set; }
+
+    [JsonProperty("shape")] public string Shape { get; set; }
+
+    [JsonProperty("x")] public int X { get; set; }
+
+    [JsonProperty("y")] public int Y { get; set; }
+
+    [JsonProperty("z")] public int Z { get; set; }
 }
