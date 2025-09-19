@@ -8,6 +8,7 @@
     <ItemGroup>
         <Reference Include="UnityEngine.CoreModule" HintPath="$(EXILED_REFERENCES)\UnityEngine.CoreModule.dll" Private="false"/>
         <Reference Include="Assembly-CSharp" HintPath="$(EXILED_REFERENCES)\Assembly-CSharp.dll" Publicize="true"/>
+        <Reference Include="Assembly-CSharp-firstpass" HintPath="$(EXILED_REFERENCES)\Assembly-CSharp-firstpass.dll" Publicize="true"/>
         <Reference Include="SnakeAPI" HintPath="$(EXILED_REFERENCES)\SnakeAPI.dll" Publicize="false"/>
     </ItemGroup>
 

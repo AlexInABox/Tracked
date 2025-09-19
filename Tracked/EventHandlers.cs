@@ -13,7 +13,9 @@ using LabApi.Features.Permissions;
 using LabApi.Features.Wrappers;
 using LabApi.Loader;
 using MapGeneration;
+using MEC;
 using Newtonsoft.Json;
+using PlayerRoles;
 using SnakeAPI.API;
 using UnityEngine;
 using Logger = LabApi.Features.Console.Logger;
@@ -28,6 +30,7 @@ public static class EventHandlers
     //Helper dictionaries
     private static readonly Dictionary<string, int> PlayerStartingTimestamps = new();
     private static int _roundStartTimestamp;
+    private static readonly Dictionary<string, int> ExtraPlayerPointsThisRound = new();
 
     //Publish dictionaries
     private static readonly Dictionary<string, int> PlayerTimePlayedThisRound = new();
@@ -71,6 +74,9 @@ public static class EventHandlers
         //Map stuff
         //ServerEvents.MapGenerated += OnMapGenerated;
         ServerEvents.WaitingForPlayers += OnWaitingForPlayers;
+
+        //Escaping logic
+        PlayerEvents.Escaping += OnEscaping;
     }
 
     public static void UnregisterEvents()
@@ -85,6 +91,7 @@ public static class EventHandlers
         SnakeEvents.SnakeLost -= OnSnakeGameFinished;
         //ServerEvents.MapGenerated -= OnMapGenerated;
         ServerEvents.WaitingForPlayers -= OnWaitingForPlayers;
+        PlayerEvents.Escaping -= OnEscaping;
     }
 
     private static void OnJoined(PlayerJoinedEventArgs ev)
@@ -248,6 +255,40 @@ public static class EventHandlers
             "map.json");
     }
 
+    private static void OnEscaping(PlayerEscapingEventArgs ev)
+    {
+        if (ev.OldRole is not (RoleTypeId.ClassD or RoleTypeId.Scientist)) return;
+
+        if (ev.Player.IsDummy || ev.Player.IsHost || ev.Player.DoNotTrack) return;
+
+        int coinCount = ev.Player.Items.Count(item => item.Type == ItemType.Coin);
+        if (coinCount == 0) return;
+
+        if (ExtraPlayerPointsThisRound.ContainsKey(ev.Player.UserId))
+            ExtraPlayerPointsThisRound[ev.Player.UserId] += coinCount * Plugin.Instance.Config!.CoinEscapeMultiplier;
+        else
+            ExtraPlayerPointsThisRound[ev.Player.UserId] = coinCount * Plugin.Instance.Config!.CoinEscapeMultiplier;
+
+        Timing.CallDelayed(4f, () =>
+        {
+            string coinWord = coinCount == 1 ? "Münze" : "Münzen";
+            string zvcCoinWord = coinCount * Plugin.Instance.Config!.CoinEscapeMultiplier == 1 ? "Münze" : "Münzen";
+
+
+            ev.Player.SendHint(
+                $"+ {coinCount * Plugin.Instance.Config!.CoinEscapeMultiplier} <b>Zeitvertreib {zvcCoinWord}</b>\n Grund: Entkommen mit {coinCount} {coinWord}",
+                6f
+            );
+        });
+
+        // Remove all coins from inventory
+        //ev.Player.RemoveItem(ItemType.Coin, coinCount); <- doesn't work for some reason
+        for (int i = 0; i < coinCount; i++) ev.Player.RemoveItem(ItemType.Coin);
+
+        Logger.Debug(
+            $"Player {ev.Player.UserId} escaped with {coinCount} coins, earning {coinCount * Plugin.Instance.Config!.CoinEscapeMultiplier} extra points.");
+    }
+
     private static void OnRoundStarting(RoundStartingEventArgs ev)
     {
         _roundStartTimestamp = (int)Time.time;
@@ -291,6 +332,8 @@ public static class EventHandlers
 
             if (string.IsNullOrEmpty(userId)) continue; //HATE. LET ME TELL YOU HOW MUCH I'VE COME TO HATE LABAPI!!
             PlayerPointsThisRound[userId] = GetPointsOfPlayer(player);
+            if (ExtraPlayerPointsThisRound.TryGetValue(userId, out int extraPoints))
+                PlayerPointsThisRound[userId] += extraPoints;
         }
 
         UploadTimesToDatabase();
@@ -655,7 +698,7 @@ public class TrackedRoom
     [JsonProperty("name")] public string Name { get; set; }
 
     [JsonProperty("shape")] public string Shape { get; set; }
-    
+
     [JsonProperty("zone")] public string Zone { get; set; }
 
     [JsonProperty("pos")] public TrackedCoordinates Pos { get; set; }
@@ -671,6 +714,6 @@ public class TrackedConnectedRoom
 public class TrackedCoordinates
 {
     [JsonProperty("x")] public float X { get; set; }
-    
+
     [JsonProperty("z")] public float Z { get; set; }
 }
