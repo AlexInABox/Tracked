@@ -59,6 +59,7 @@ public static class EventHandlers
     {
         // Starting conditions
         PlayerEvents.Joined += OnJoined;
+        ServerEvents.WaitingForPlayers += OnWaitingForPlayers;
         ServerEvents.RoundStarting += OnRoundStarting;
 
         // Kill stuff
@@ -132,14 +133,14 @@ public static class EventHandlers
                     zvc += storedPoints;
                 if (ExtraPlayerPointsThisRound.TryGetValue(userId, out int extraPoints))
                     zvc += extraPoints;
-                if (PlayerPointsThisRound.TryGetValue(userId, out int points))
-                    zvc += points;
+                zvc += GetPointsOfPlayer(ev.Player);
                 hint += $"<size=20><b>Zeitvertreib Punkte: {zvc}</b></size>\n";
                 return hint;
             },
             YCoordinateAlign = HintVerticalAlign.Bottom,
             YCoordinate = 995,
-            XCoordinate = (int)(-540f * ev.Player.ReferenceHub.aspectRatioSync.AspectRatio + 600f) + 50
+            XCoordinate = (int)(-540f * ev.Player.ReferenceHub.aspectRatioSync.AspectRatio + 600f) + 50,
+            SyncSpeed = HintSyncSpeed.Slow
         };
         PlayerDisplay playerDisplay = PlayerDisplay.Get(ev.Player);
         playerDisplay.AddHint(hint);
@@ -253,41 +254,6 @@ public static class EventHandlers
             $"Player {userId} finished snake game with score: {score}. Total this round: {PlayerSnakeScoresThisRound[userId]}");
     }
 
-    private static void OnWaitingForPlayers()
-    {
-        List<TrackedRoom> map = [];
-        foreach (Room room in Map.Rooms)
-        {
-            List<TrackedConnectedRoom> connectedRooms = [];
-            foreach (RoomIdentifier connectedRoomIdentifier in room.ConnectedRooms)
-                connectedRooms.Add(new TrackedConnectedRoom
-                {
-                    Pos = new TrackedCoordinates
-                    {
-                        X = (int)Math.Round(Room.Get(connectedRoomIdentifier).Position.x),
-                        Z = (int)Math.Round(Room.Get(connectedRoomIdentifier).Position.z)
-                    }
-                });
-            TrackedRoom newRoom = new()
-            {
-                Name = room.Name.ToString(),
-                Shape = room.Shape.ToString(),
-                Zone = room.Zone.ToString(),
-                Pos = new TrackedCoordinates
-                {
-                    X = (int)Math.Round(room.Position.x),
-                    Z = (int)Math.Round(room.Position.z)
-                },
-                ConnectedRooms = connectedRooms
-            };
-            map.Add(newRoom);
-        }
-
-        FileManager.WriteStringToFile(JsonConvert.SerializeObject(map, Formatting.Indented),
-            Plugin.Instance.GetConfigPath(Plugin.Instance.ConfigFileName).Replace(Plugin.Instance.ConfigFileName, "") +
-            "map.json");
-    }
-
     private static void OnEscaping(PlayerEscapingEventArgs ev)
     {
         if (ev.OldRole is not (RoleTypeId.ClassD or RoleTypeId.Scientist)) return;
@@ -341,15 +307,52 @@ public static class EventHandlers
             $"Player {ev.Player.UserId} destroyed a window, earning 1 extra point.");
     }
 
-    private static void OnRoundStarting(RoundStartingEventArgs ev)
+    private static void OnWaitingForPlayers()
     {
-        _roundStartTimestamp = (int)Time.time;
         PlayerRoundsPlayedThisRound.Clear();
         PlayerMedkitsUsedThisRound.Clear();
         PlayerColasUsedThisRound.Clear();
         PlayerAdrenalineUsedThisRound.Clear();
         PlayerPocketEscapesThisRound.Clear();
         PlayerPointsThisRound.Clear();
+        ExtraPlayerPointsThisRound.Clear();
+
+        List<TrackedRoom> map = [];
+        foreach (Room room in Map.Rooms)
+        {
+            List<TrackedConnectedRoom> connectedRooms = [];
+            foreach (RoomIdentifier connectedRoomIdentifier in room.ConnectedRooms)
+                connectedRooms.Add(new TrackedConnectedRoom
+                {
+                    Pos = new TrackedCoordinates
+                    {
+                        X = (int)Math.Round(Room.Get(connectedRoomIdentifier).Position.x),
+                        Z = (int)Math.Round(Room.Get(connectedRoomIdentifier).Position.z)
+                    }
+                });
+            TrackedRoom newRoom = new()
+            {
+                Name = room.Name.ToString(),
+                Shape = room.Shape.ToString(),
+                Zone = room.Zone.ToString(),
+                Pos = new TrackedCoordinates
+                {
+                    X = (int)Math.Round(room.Position.x),
+                    Z = (int)Math.Round(room.Position.z)
+                },
+                ConnectedRooms = connectedRooms
+            };
+            map.Add(newRoom);
+        }
+
+        FileManager.WriteStringToFile(JsonConvert.SerializeObject(map, Formatting.Indented),
+            Plugin.Instance.GetConfigPath(Plugin.Instance.ConfigFileName).Replace(Plugin.Instance.ConfigFileName, "") +
+            "map.json");
+    }
+
+    private static void OnRoundStarting(RoundStartingEventArgs ev)
+    {
+        _roundStartTimestamp = (int)Time.time;
 
         ConnectToRoundReports();
     }
@@ -377,6 +380,7 @@ public static class EventHandlers
                 PlayerRoundsPlayedThisRound[userId] = 1; // Player gets 1 round played
         }
 
+        Dictionary<string, int> totalPlayerPointsTemp = new();
         foreach (Player player in Player.List)
         {
             if (player.IsDummy || player.IsHost || player.DoNotTrack) continue;
@@ -384,8 +388,11 @@ public static class EventHandlers
 
             if (string.IsNullOrEmpty(userId)) continue; //HATE. LET ME TELL YOU HOW MUCH I'VE COME TO HATE LABAPI!!
             PlayerPointsThisRound[userId] = GetPointsOfPlayer(player);
+
+            totalPlayerPointsTemp[userId] = PlayerPointsThisRound[userId];
+
             if (ExtraPlayerPointsThisRound.TryGetValue(userId, out int extraPoints))
-                PlayerPointsThisRound[userId] += extraPoints;
+                totalPlayerPointsTemp[userId] += extraPoints;
         }
 
         UploadTimesToDatabase();
@@ -395,7 +402,7 @@ public static class EventHandlers
         UploadColasToDatabase();
         UploadAdrenalineToDatabase();
         UploadPocketEscapesToDatabase();
-        UploadPlayerPointsToDatabase();
+        UploadPlayerPointsToDatabase(totalPlayerPointsTemp);
         UploadSnakeScoresToDatabase();
         UploadFakeRankAllowedToDatabase();
         UploadFakeRankAdminToDatabase();
@@ -601,11 +608,11 @@ public static class EventHandlers
         PlayerPocketEscapesThisRound.Clear();
     }
 
-    private static async void UploadPlayerPointsToDatabase()
+    private static async void UploadPlayerPointsToDatabase(Dictionary<string, int> totalPlayerPoints)
     {
         try
         {
-            string json = JsonConvert.SerializeObject(PlayerPointsThisRound);
+            string json = JsonConvert.SerializeObject(totalPlayerPoints);
 
             Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
             Logger.Debug($"Payload: {json}");
@@ -627,7 +634,7 @@ public static class EventHandlers
             Logger.Debug($"Failed to upload XP to database: {ex}");
         }
 
-        PlayerPocketEscapesThisRound.Clear();
+        PlayerPointsThisRound.Clear();
     }
 
 
@@ -749,8 +756,6 @@ public static class EventHandlers
 
         int points = 0;
         points = (int)_roundReportsApi.GetMethod("GetPointsOfPlayer")?.Invoke(null, [player.PlayerId])!;
-
-        Logger.Info("GetPointsOfPlayer called for player: " + player.DisplayName + ", points: " + points);
         return points;
     }
 
