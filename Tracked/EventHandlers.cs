@@ -1,11 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Text;
+using System.Threading.Tasks;
+using Exiled.API.Enums;
 using Exiled.API.Interfaces;
 using Exiled.Loader;
+using HintServiceMeow.Core.Enum;
+using HintServiceMeow.Core.Models.Hints;
+using HintServiceMeow.Core.Utilities;
 using LabApi.Events.Arguments.PlayerEvents;
 using LabApi.Events.Arguments.ServerEvents;
 using LabApi.Events.Handlers;
@@ -31,6 +37,7 @@ public static class EventHandlers
     private static readonly Dictionary<string, int> PlayerStartingTimestamps = new();
     private static int _roundStartTimestamp;
     private static readonly Dictionary<string, int> ExtraPlayerPointsThisRound = new();
+    private static Dictionary<string, int> StoredPlayerPointsThisRound = new();
 
     //Publish dictionaries
     private static readonly Dictionary<string, int> PlayerTimePlayedThisRound = new();
@@ -77,6 +84,9 @@ public static class EventHandlers
 
         //Escaping logic
         PlayerEvents.Escaping += OnEscaping;
+
+        //Points for window destructions
+        PlayerEvents.DamagedWindow += OnDamagedWindow;
     }
 
     public static void UnregisterEvents()
@@ -92,6 +102,7 @@ public static class EventHandlers
         //ServerEvents.MapGenerated -= OnMapGenerated;
         ServerEvents.WaitingForPlayers -= OnWaitingForPlayers;
         PlayerEvents.Escaping -= OnEscaping;
+        PlayerEvents.DamagedWindow -= OnDamagedWindow;
     }
 
     private static void OnJoined(PlayerJoinedEventArgs ev)
@@ -108,8 +119,33 @@ public static class EventHandlers
 
         //Check if the player is allowed to use fake rank
         FakeRankAllowed[ev.Player.UserId] = ev.Player.HasPermissions("fakerank");
-
         FakeRankAdmin[ev.Player.UserId] = ev.Player.HasPermissions("fakerank.admin");
+
+        // Now initialize the HUD
+        GetStoredZeitvertreibCoinsFromDatabase(userId);
+        
+        Hint hint = new()
+        {
+            Alignment = HintAlignment.Left,
+            AutoText = _ =>
+            {
+                string hint = String.Empty;
+                int zvc = 0;
+                if (StoredPlayerPointsThisRound.TryGetValue(userId, out int storedPoints))
+                    zvc += storedPoints;
+                if (ExtraPlayerPointsThisRound.TryGetValue(userId, out int extraPoints))
+                    zvc += extraPoints;
+                if (PlayerPointsThisRound.TryGetValue(userId, out int points))
+                    zvc += points;
+                hint += $"<size=20><b>Zeitvertreib Punkte: {zvc}</b></size>\n";
+                return hint;
+            },
+            YCoordinateAlign = HintVerticalAlign.Bottom,
+            YCoordinate = 995,
+            XCoordinate = (int)(-540f * ev.Player.ReferenceHub.aspectRatioSync.AspectRatio + 600f) + 50,
+        };
+        PlayerDisplay playerDisplay = PlayerDisplay.Get(ev.Player);
+        playerDisplay.AddHint(hint);
     }
 
     private static void OnLeft(PlayerLeftEventArgs ev)
@@ -289,6 +325,25 @@ public static class EventHandlers
             $"Player {ev.Player.UserId} escaped with {coinCount} coins, earning {coinCount * Plugin.Instance.Config!.CoinEscapeMultiplier} extra points.");
     }
 
+    private static void OnDamagedWindow(PlayerDamagedWindowEventArgs ev)
+    {
+        if (!ev.Window.IsBroken) return;
+
+        if (ev.Player.IsDummy || ev.Player.IsHost || ev.Player.DoNotTrack) return;
+
+        if (ExtraPlayerPointsThisRound.ContainsKey(ev.Player.UserId))
+            ExtraPlayerPointsThisRound[ev.Player.UserId] += 1;
+        else
+            ExtraPlayerPointsThisRound[ev.Player.UserId] = 1;
+
+        ev.Player.SendHint(
+            "+ 1 <b>Zeitvertreib Münze</b>\n Grund: Fenster zerstört",
+            4f);
+
+        Logger.Debug(
+            $"Player {ev.Player.UserId} destroyed a window, earning 1 extra point.");
+    }
+
     private static void OnRoundStarting(RoundStartingEventArgs ev)
     {
         _roundStartTimestamp = (int)Time.time;
@@ -298,6 +353,7 @@ public static class EventHandlers
         PlayerAdrenalineUsedThisRound.Clear();
         PlayerPocketEscapesThisRound.Clear();
         PlayerPointsThisRound.Clear();
+        StoredPlayerPointsThisRound.Clear();
 
         ConnectToRoundReports();
     }
@@ -659,6 +715,30 @@ public static class EventHandlers
 
         FakeRankAllowed.Clear();
     }
+
+    private static async void GetStoredZeitvertreibCoinsFromDatabase(string userId)
+    {
+        try
+        {
+            using HttpClient client = new();
+            client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
+
+            HttpResponseMessage response = await client
+                .GetAsync($"{Config.EndpointUrl}/experience?userId={Uri.EscapeDataString(userId)}")
+                .ConfigureAwait(false);
+            response.EnsureSuccessStatusCode(); // Throw if not successful
+
+            string responseText = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            Logger.Debug($"Fetched stored XP for user {userId} from database. Response: {responseText}");
+            
+            StoredPlayerPointsThisRound[userId] = int.TryParse(responseText, out int experience) ? experience : 0;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to fetch stored XP for user {userId}: {ex}");
+        }
+    }
+
 
     private static int GetPointsOfPlayer(Player player)
     {

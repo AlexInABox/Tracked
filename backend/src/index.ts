@@ -9,6 +9,7 @@ import * as uploadPlayerPoints from './routes/upload/playerpoints';
 import * as uploadSnake from './routes/upload/snake';
 import * as uploadFakeRankAllowed from './routes/upload/fakerankallowed';
 import * as uploadFakeRankAdmin from './routes/upload/fakerankadmin';
+import * as experience from './routes/experience';
 
 
 const routes: Record<string, any> = {
@@ -23,6 +24,7 @@ const routes: Record<string, any> = {
 	'/upload/snake': uploadSnake,
 	'/upload/fakerankallowed': uploadFakeRankAllowed,
 	'/upload/fakerankadmin': uploadFakeRankAdmin,
+	'/experience': experience,
 };
 
 export default {
