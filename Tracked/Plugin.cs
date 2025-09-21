@@ -15,7 +15,7 @@ public class Plugin : Plugin<Config>
         "A terrible plugin for the SCP:SL server \"Zeitvertreib\" that tracks player statistics and writes them to a Cloudflare D1 database.";
 
     public override string Author { get; } = "AlexInABox";
-    public override Version Version { get; } = new(1, 8, 2);
+    public override Version Version { get; } = new(1, 9, 2);
     public override Version RequiredApiVersion { get; } = new(LabApiProperties.CompiledVersion);
     public Translation Translation { get; private set; }
 

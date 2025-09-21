@@ -1,12 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Text;
-using System.Threading.Tasks;
-using Exiled.API.Enums;
 using Exiled.API.Interfaces;
 using Exiled.Loader;
 using HintServiceMeow.Core.Enum;
@@ -37,7 +34,7 @@ public static class EventHandlers
     private static readonly Dictionary<string, int> PlayerStartingTimestamps = new();
     private static int _roundStartTimestamp;
     private static readonly Dictionary<string, int> ExtraPlayerPointsThisRound = new();
-    private static Dictionary<string, int> StoredPlayerPointsThisRound = new();
+    private static readonly Dictionary<string, int> StoredPlayerPoints = new();
 
     //Publish dictionaries
     private static readonly Dictionary<string, int> PlayerTimePlayedThisRound = new();
@@ -123,15 +120,15 @@ public static class EventHandlers
 
         // Now initialize the HUD
         GetStoredZeitvertreibCoinsFromDatabase(userId);
-        
+
         Hint hint = new()
         {
             Alignment = HintAlignment.Left,
             AutoText = _ =>
             {
-                string hint = String.Empty;
+                string hint = string.Empty;
                 int zvc = 0;
-                if (StoredPlayerPointsThisRound.TryGetValue(userId, out int storedPoints))
+                if (StoredPlayerPoints.TryGetValue(userId, out int storedPoints))
                     zvc += storedPoints;
                 if (ExtraPlayerPointsThisRound.TryGetValue(userId, out int extraPoints))
                     zvc += extraPoints;
@@ -142,7 +139,7 @@ public static class EventHandlers
             },
             YCoordinateAlign = HintVerticalAlign.Bottom,
             YCoordinate = 995,
-            XCoordinate = (int)(-540f * ev.Player.ReferenceHub.aspectRatioSync.AspectRatio + 600f) + 50,
+            XCoordinate = (int)(-540f * ev.Player.ReferenceHub.aspectRatioSync.AspectRatio + 600f) + 50
         };
         PlayerDisplay playerDisplay = PlayerDisplay.Get(ev.Player);
         playerDisplay.AddHint(hint);
@@ -353,7 +350,6 @@ public static class EventHandlers
         PlayerAdrenalineUsedThisRound.Clear();
         PlayerPocketEscapesThisRound.Clear();
         PlayerPointsThisRound.Clear();
-        StoredPlayerPointsThisRound.Clear();
 
         ConnectToRoundReports();
     }
@@ -449,7 +445,7 @@ public static class EventHandlers
                 client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(Config.EndpointUrl + "/kills", content);
+                HttpResponseMessage response = await client.PostAsync(Config.EndpointUrl + "/upload/kills", content);
 
                 string responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded player kills to database. Response: {responseText}");
@@ -477,7 +473,7 @@ public static class EventHandlers
                 client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(Config.EndpointUrl + "/rounds", content);
+                HttpResponseMessage response = await client.PostAsync(Config.EndpointUrl + "/upload/rounds", content);
 
                 string responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded player rounds to database. Response: {responseText}");
@@ -505,7 +501,7 @@ public static class EventHandlers
                 client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(Config.EndpointUrl + "/medkits", content);
+                HttpResponseMessage response = await client.PostAsync(Config.EndpointUrl + "/upload/medkits", content);
 
                 string responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded player medkits usage to database. Response: {responseText}");
@@ -533,7 +529,7 @@ public static class EventHandlers
                 client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(Config.EndpointUrl + "/colas", content);
+                HttpResponseMessage response = await client.PostAsync(Config.EndpointUrl + "/upload/colas", content);
 
                 string responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded player colas usage to database. Response: {responseText}");
@@ -561,7 +557,8 @@ public static class EventHandlers
                 client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(Config.EndpointUrl + "/adrenaline", content);
+                HttpResponseMessage response =
+                    await client.PostAsync(Config.EndpointUrl + "/upload/adrenaline", content);
 
                 string responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded player adrenaline usage to database. Response: {responseText}");
@@ -589,7 +586,8 @@ public static class EventHandlers
                 client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(Config.EndpointUrl + "/pocketescapes", content);
+                HttpResponseMessage response =
+                    await client.PostAsync(Config.EndpointUrl + "/upload/pocketescapes", content);
 
                 string responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded player pocket escapes to database. Response: {responseText}");
@@ -617,7 +615,8 @@ public static class EventHandlers
                 client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(Config.EndpointUrl + "/playerpoints", content);
+                HttpResponseMessage response =
+                    await client.PostAsync(Config.EndpointUrl + "/upload/playerpoints", content);
 
                 string responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded XP to database. Response: {responseText}");
@@ -646,7 +645,7 @@ public static class EventHandlers
                 client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(Config.EndpointUrl + "/snake", content);
+                HttpResponseMessage response = await client.PostAsync(Config.EndpointUrl + "/upload/snake", content);
 
                 string responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded SnakeScore to database. Response: {responseText}");
@@ -674,7 +673,8 @@ public static class EventHandlers
                 client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(Config.EndpointUrl + "/fakerankallowed", content);
+                HttpResponseMessage response =
+                    await client.PostAsync(Config.EndpointUrl + "/upload/fakerankallowed", content);
 
                 string responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded FakeRankAllowed to database. Response: {responseText}");
@@ -702,7 +702,8 @@ public static class EventHandlers
                 client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(Config.EndpointUrl + "/fakerankadmin", content);
+                HttpResponseMessage response =
+                    await client.PostAsync(Config.EndpointUrl + "/upload/fakerankadmin", content);
 
                 string responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded FakeRankAdmin to database. Response: {responseText}");
@@ -720,6 +721,7 @@ public static class EventHandlers
     {
         try
         {
+            Logger.Debug($"{Config.EndpointUrl}/experience?userId={Uri.EscapeDataString(userId)}");
             using HttpClient client = new();
             client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
@@ -730,8 +732,8 @@ public static class EventHandlers
 
             string responseText = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             Logger.Debug($"Fetched stored XP for user {userId} from database. Response: {responseText}");
-            
-            StoredPlayerPointsThisRound[userId] = int.TryParse(responseText, out int experience) ? experience : 0;
+
+            StoredPlayerPoints[userId] = int.TryParse(responseText, out int experience) ? experience : 0;
         }
         catch (Exception ex)
         {
