@@ -48,6 +48,7 @@ public static class EventHandlers
     private static readonly Dictionary<string, int> PlayerSnakeScoresThisRound = new();
     private static readonly Dictionary<string, bool> FakeRankAllowed = new();
     private static readonly Dictionary<string, bool> FakeRankAdmin = new();
+    private static readonly Dictionary<string, string> PlayerUsernames = new();
 
     //RoundReports references
     private static IPlugin<IConfig> _roundReportsPlugin;
@@ -111,6 +112,7 @@ public static class EventHandlers
         int timestamp = (int)Time.time;
 
         PlayerStartingTimestamps[userId] = timestamp;
+        PlayerUsernames[userId] = ev.Player.Nickname;
 
         if (!PlayerTimePlayedThisRound.ContainsKey(userId)) PlayerTimePlayedThisRound[userId] = 0;
         if (!PlayerRoundsPlayedThisRound.ContainsKey(userId)) PlayerRoundsPlayedThisRound[userId] = 0;
@@ -118,6 +120,9 @@ public static class EventHandlers
         //Check if the player is allowed to use fake rank
         FakeRankAllowed[ev.Player.UserId] = ev.Player.HasPermissions("fakerank");
         FakeRankAdmin[ev.Player.UserId] = ev.Player.HasPermissions("fakerank.admin");
+        
+        
+        
 
         // Now initialize the HUD
         GetStoredZeitvertreibCoinsFromDatabase(userId);
@@ -316,6 +321,7 @@ public static class EventHandlers
         PlayerPocketEscapesThisRound.Clear();
         PlayerPointsThisRound.Clear();
         ExtraPlayerPointsThisRound.Clear();
+        PlayerUsernames.Clear();
 
         List<TrackedRoom> map = [];
         foreach (Room room in Map.Rooms)
@@ -406,6 +412,7 @@ public static class EventHandlers
         UploadSnakeScoresToDatabase();
         UploadFakeRankAllowedToDatabase();
         UploadFakeRankAdminToDatabase();
+        UploadUsernamesToDatabase();
     }
 
     private static async void UploadTimesToDatabase()
@@ -719,6 +726,35 @@ public static class EventHandlers
         catch (Exception ex)
         {
             Logger.Debug($"Failed to upload FakeRankAdmin to database: {ex}");
+        }
+
+        FakeRankAllowed.Clear();
+    }
+    
+    private static async void UploadUsernamesToDatabase()
+    {
+        try
+        {
+            string json = JsonConvert.SerializeObject(PlayerUsernames);
+
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
+            Logger.Debug($"Payload: {json}");
+
+            using (HttpClient client = new())
+            {
+                client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
+
+                StringContent content = new(json, Encoding.UTF8, "application/json");
+                HttpResponseMessage response =
+                    await client.PostAsync(Config.EndpointUrl + "/upload/usernames", content);
+
+                string responseText = await response.Content.ReadAsStringAsync();
+                Logger.Info($"Uploaded usernames to database. Response: {responseText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Debug($"Failed to upload usernames to database: {ex}");
         }
 
         FakeRankAllowed.Clear();
