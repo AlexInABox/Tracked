@@ -746,7 +746,7 @@ public static class EventHandlers
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
                 HttpResponseMessage response =
-                    await client.PostAsync(Config.EndpointUrl + "/upload/usernames", content);
+                    await client.PostAsync(Config.EndpointUrl + "/upload/username", content);
 
                 string responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded usernames to database. Response: {responseText}");
