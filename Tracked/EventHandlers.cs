@@ -145,7 +145,7 @@ public static class EventHandlers
             YCoordinateAlign = HintVerticalAlign.Bottom,
             YCoordinate = 995,
             XCoordinate = (int)(-540f * ev.Player.ReferenceHub.aspectRatioSync.AspectRatio + 600f) + 50,
-            SyncSpeed = HintSyncSpeed.Slow
+            SyncSpeed = HintSyncSpeed.Slowest
         };
         PlayerDisplay playerDisplay = PlayerDisplay.Get(ev.Player);
         playerDisplay.AddHint(hint);
