@@ -120,9 +120,7 @@ public static class EventHandlers
         //Check if the player is allowed to use fake rank
         FakeRankAllowed[ev.Player.UserId] = ev.Player.HasPermissions("fakerank");
         FakeRankAdmin[ev.Player.UserId] = ev.Player.HasPermissions("fakerank.admin");
-        
-        
-        
+
 
         // Now initialize the HUD
         GetStoredZeitvertreibCoinsFromDatabase(userId);
@@ -430,7 +428,7 @@ public static class EventHandlers
                 client.DefaultRequestHeaders.Add("Authorization", config.Apikey);
 
                 StringContent content = new(json, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/times", content);
+                HttpResponseMessage response = await client.PostAsync(config.EndpointUrl + "/upload/times", content);
 
                 string responseText = await response.Content.ReadAsStringAsync();
                 Logger.Info($"Uploaded player times to database. Response: {responseText}");
@@ -730,7 +728,7 @@ public static class EventHandlers
 
         FakeRankAllowed.Clear();
     }
-    
+
     private static async void UploadUsernamesToDatabase()
     {
         try
