@@ -19,6 +19,7 @@ using MapGeneration;
 using MEC;
 using Newtonsoft.Json;
 using PlayerRoles;
+using Respawning.Objectives;
 using SnakeAPI.API;
 using UnityEngine;
 using Logger = LabApi.Features.Console.Logger;
@@ -55,6 +56,9 @@ public static class EventHandlers
     private static Assembly _roundReportsAssembly;
     private static bool _foundRoundReports;
     private static Type _roundReportsApi;
+
+    //Hint related dictionaries
+    private static readonly Dictionary<int, List<string>> PlayerKillFeed = new();
 
     public static void RegisterEvents()
     {
@@ -125,7 +129,7 @@ public static class EventHandlers
         // Now initialize the HUD
         GetStoredZeitvertreibCoinsFromDatabase(userId);
 
-        Hint hint = new()
+        Hint zvcHint = new()
         {
             Alignment = HintAlignment.Left,
             AutoText = _ =>
@@ -141,12 +145,31 @@ public static class EventHandlers
                 return hint;
             },
             YCoordinateAlign = HintVerticalAlign.Bottom,
-            YCoordinate = 995,
+            YCoordinate = 990,
             XCoordinate = (int)(-540f * ev.Player.ReferenceHub.aspectRatioSync.AspectRatio + 600f) + 50,
             SyncSpeed = HintSyncSpeed.Slowest
         };
         PlayerDisplay playerDisplay = PlayerDisplay.Get(ev.Player);
-        playerDisplay.AddHint(hint);
+        playerDisplay.AddHint(zvcHint);
+
+
+        PlayerKillFeed[ev.Player.PlayerId] = [];
+        Hint killFeed = new()
+        {
+            Alignment = HintAlignment.Left,
+            AutoText = _ =>
+            {
+                string hint = "<size=20><b>";
+                foreach (string s in PlayerKillFeed[ev.Player.PlayerId]) hint += s + "\n";
+                hint += "</b></size>";
+                return hint;
+            },
+            YCoordinateAlign = HintVerticalAlign.Top,
+            YCoordinate = 30,
+            XCoordinate = (int)(-540f * ev.Player.ReferenceHub.aspectRatioSync.AspectRatio + 600f),
+            SyncSpeed = HintSyncSpeed.Normal
+        };
+        playerDisplay.AddHint(killFeed);
     }
 
     private static void OnLeft(PlayerLeftEventArgs ev)
@@ -166,6 +189,19 @@ public static class EventHandlers
 
     private static void OnDeath(PlayerDeathEventArgs ev)
     {
+        if (ev.Attacker == null || ev.Attacker.IsNpc) return;
+
+        string color = "white";
+        color = ev.OldRole.GetRoleColor().ToHex();
+        PlayerKillFeed[ev.Attacker.PlayerId].Insert(0, $"<color={color}>💀 - {ev.Player.Nickname}</color>");
+
+        Timing.CallDelayed(5f, () =>
+        {
+            if (!PlayerKillFeed.ContainsKey(ev.Attacker.PlayerId)) return;
+            if (PlayerKillFeed[ev.Attacker.PlayerId].Count > 0)
+                PlayerKillFeed[ev.Attacker.PlayerId].RemoveAt(PlayerKillFeed[ev.Attacker.PlayerId].Count - 1);
+        });
+
         if (ev.Player.IsDummy || ev.Player.IsHost) return;
 
         // Check if ServerLogsText contains "unknown" (any spelling) - indicates disconnect, should not be counted
@@ -173,7 +209,7 @@ public static class EventHandlers
         if (string.IsNullOrEmpty(serverLogsText) ||
             serverLogsText.ToLower().Contains("unknown"))
         {
-            Logger.Debug($"Skipping kill record due to disconnect: {serverLogsText}");
+            Logger.Debug($"Skipping kill record due to disconnect: {serverLogsText}", Plugin.Instance.Config!.Debug);
             return;
         }
 
@@ -191,7 +227,7 @@ public static class EventHandlers
             timestamp
         ));
 
-        Logger.Debug($"Kill recorded: {attackerId} -> {targetId} at {timestamp}");
+        Logger.Debug($"Kill recorded: {attackerId} -> {targetId} at {timestamp}", Plugin.Instance.Config!.Debug);
     }
 
     private static void OnUsedItem(PlayerUsedItemEventArgs ev)
@@ -210,21 +246,24 @@ public static class EventHandlers
             if (!PlayerMedkitsUsedThisRound.ContainsKey(userId))
                 PlayerMedkitsUsedThisRound[userId] = 0;
             PlayerMedkitsUsedThisRound[userId]++;
-            Logger.Debug($"Player {userId} used a medkit. Total this round: {PlayerMedkitsUsedThisRound[userId]}");
+            Logger.Debug($"Player {userId} used a medkit. Total this round: {PlayerMedkitsUsedThisRound[userId]}",
+                Plugin.Instance.Config!.Debug);
         }
         else if (isCola)
         {
             if (!PlayerColasUsedThisRound.ContainsKey(userId))
                 PlayerColasUsedThisRound[userId] = 0;
             PlayerColasUsedThisRound[userId]++;
-            Logger.Debug($"Player {userId} used a cola. Total this round: {PlayerColasUsedThisRound[userId]}");
+            Logger.Debug($"Player {userId} used a cola. Total this round: {PlayerColasUsedThisRound[userId]}",
+                Plugin.Instance.Config!.Debug);
         }
         else
         {
             if (!PlayerAdrenalineUsedThisRound.ContainsKey(userId))
                 PlayerAdrenalineUsedThisRound[userId] = 0;
             PlayerAdrenalineUsedThisRound[userId]++;
-            Logger.Debug($"Player {userId} used adrenaline. Total this round: {PlayerAdrenalineUsedThisRound[userId]}");
+            Logger.Debug($"Player {userId} used adrenaline. Total this round: {PlayerAdrenalineUsedThisRound[userId]}",
+                Plugin.Instance.Config!.Debug);
         }
     }
 
@@ -239,7 +278,8 @@ public static class EventHandlers
             PlayerPocketEscapesThisRound[userId] = 0;
         PlayerPocketEscapesThisRound[userId]++;
         Logger.Debug(
-            $"Player {userId} successfully escaped pocket dimension. Total this round: {PlayerPocketEscapesThisRound[userId]}");
+            $"Player {userId} successfully escaped pocket dimension. Total this round: {PlayerPocketEscapesThisRound[userId]}",
+            Plugin.Instance.Config!.Debug);
     }
 
     private static void OnSnakeGameFinished(Player player, int score)
@@ -254,7 +294,8 @@ public static class EventHandlers
 
         PlayerSnakeScoresThisRound[userId] = Math.Max(PlayerSnakeScoresThisRound[userId], score);
         Logger.Debug(
-            $"Player {userId} finished snake game with score: {score}. Total this round: {PlayerSnakeScoresThisRound[userId]}");
+            $"Player {userId} finished snake game with score: {score}. Total this round: {PlayerSnakeScoresThisRound[userId]}",
+            Plugin.Instance.Config!.Debug);
     }
 
     private static void OnEscaping(PlayerEscapingEventArgs ev)
@@ -288,7 +329,8 @@ public static class EventHandlers
         for (int i = 0; i < coinCount; i++) ev.Player.RemoveItem(ItemType.Coin);
 
         Logger.Debug(
-            $"Player {ev.Player.UserId} escaped with {coinCount} coins, earning {coinCount * Plugin.Instance.Config!.CoinEscapeMultiplier} extra points.");
+            $"Player {ev.Player.UserId} escaped with {coinCount} coins, earning {coinCount * Plugin.Instance.Config!.CoinEscapeMultiplier} extra points.",
+            Plugin.Instance.Config!.Debug);
     }
 
     private static void OnDamagedWindow(PlayerDamagedWindowEventArgs ev)
@@ -307,7 +349,7 @@ public static class EventHandlers
             4f);
 
         Logger.Debug(
-            $"Player {ev.Player.UserId} destroyed a window, earning 1 extra point.");
+            $"Player {ev.Player.UserId} destroyed a window, earning 1 extra point.", Plugin.Instance.Config!.Debug);
     }
 
     private static void OnWaitingForPlayers()
@@ -320,6 +362,7 @@ public static class EventHandlers
         PlayerPointsThisRound.Clear();
         ExtraPlayerPointsThisRound.Clear();
         PlayerUsernames.Clear();
+        PlayerKillFeed.Clear();
 
         List<TrackedRoom> map = [];
         foreach (Room room in Map.Rooms)
@@ -420,8 +463,8 @@ public static class EventHandlers
             Config config = Plugin.Instance.Config!;
             string json = JsonConvert.SerializeObject(PlayerTimePlayedThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}");
-            Logger.Debug($"Payload: {json}");
+            Logger.Debug($"Uploading to endpoint: {config.EndpointUrl}", Plugin.Instance.Config!.Debug);
+            Logger.Debug($"Payload: {json}", Plugin.Instance.Config!.Debug);
 
             using (HttpClient client = new())
             {
@@ -436,7 +479,7 @@ public static class EventHandlers
         }
         catch (Exception ex)
         {
-            Logger.Debug($"Failed to upload player times to database: {ex}");
+            Logger.Error($"Failed to upload player times to database: {ex}");
         }
 
         PlayerStartingTimestamps.Clear();
@@ -449,8 +492,8 @@ public static class EventHandlers
         {
             string json = JsonConvert.SerializeObject(KillsThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
-            Logger.Debug($"Payload: {json}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}", Plugin.Instance.Config!.Debug);
+            Logger.Debug($"Payload: {json}", Plugin.Instance.Config!.Debug);
 
             using (HttpClient client = new())
             {
@@ -465,7 +508,7 @@ public static class EventHandlers
         }
         catch (Exception ex)
         {
-            Logger.Debug($"Failed to upload player kills to database: {ex}");
+            Logger.Error($"Failed to upload player kills to database: {ex}");
         }
 
         KillsThisRound.Clear();
@@ -477,8 +520,8 @@ public static class EventHandlers
         {
             string json = JsonConvert.SerializeObject(PlayerRoundsPlayedThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
-            Logger.Debug($"Payload: {json}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}", Plugin.Instance.Config!.Debug);
+            Logger.Debug($"Payload: {json}", Plugin.Instance.Config!.Debug);
 
             using (HttpClient client = new())
             {
@@ -493,7 +536,7 @@ public static class EventHandlers
         }
         catch (Exception ex)
         {
-            Logger.Debug($"Failed to upload player rounds to database: {ex}");
+            Logger.Error($"Failed to upload player rounds to database: {ex}");
         }
 
         PlayerRoundsPlayedThisRound.Clear();
@@ -505,8 +548,8 @@ public static class EventHandlers
         {
             string json = JsonConvert.SerializeObject(PlayerMedkitsUsedThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
-            Logger.Debug($"Payload: {json}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}", Plugin.Instance.Config!.Debug);
+            Logger.Debug($"Payload: {json}", Plugin.Instance.Config!.Debug);
 
             using (HttpClient client = new())
             {
@@ -521,7 +564,7 @@ public static class EventHandlers
         }
         catch (Exception ex)
         {
-            Logger.Debug($"Failed to upload player medkits usage to database: {ex}");
+            Logger.Error($"Failed to upload player medkits usage to database: {ex}");
         }
 
         PlayerMedkitsUsedThisRound.Clear();
@@ -533,8 +576,8 @@ public static class EventHandlers
         {
             string json = JsonConvert.SerializeObject(PlayerColasUsedThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
-            Logger.Debug($"Payload: {json}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}", Plugin.Instance.Config!.Debug);
+            Logger.Debug($"Payload: {json}", Plugin.Instance.Config!.Debug);
 
             using (HttpClient client = new())
             {
@@ -549,7 +592,7 @@ public static class EventHandlers
         }
         catch (Exception ex)
         {
-            Logger.Debug($"Failed to upload player colas usage to database: {ex}");
+            Logger.Error($"Failed to upload player colas usage to database: {ex}");
         }
 
         PlayerColasUsedThisRound.Clear();
@@ -561,8 +604,8 @@ public static class EventHandlers
         {
             string json = JsonConvert.SerializeObject(PlayerAdrenalineUsedThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
-            Logger.Debug($"Payload: {json}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}", Plugin.Instance.Config!.Debug);
+            Logger.Debug($"Payload: {json}", Plugin.Instance.Config!.Debug);
 
             using (HttpClient client = new())
             {
@@ -578,7 +621,7 @@ public static class EventHandlers
         }
         catch (Exception ex)
         {
-            Logger.Debug($"Failed to upload player adrenaline usage to database: {ex}");
+            Logger.Error($"Failed to upload player adrenaline usage to database: {ex}");
         }
 
         PlayerAdrenalineUsedThisRound.Clear();
@@ -590,8 +633,8 @@ public static class EventHandlers
         {
             string json = JsonConvert.SerializeObject(PlayerPocketEscapesThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
-            Logger.Debug($"Payload: {json}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}", Plugin.Instance.Config!.Debug);
+            Logger.Debug($"Payload: {json}", Plugin.Instance.Config!.Debug);
 
             using (HttpClient client = new())
             {
@@ -607,7 +650,7 @@ public static class EventHandlers
         }
         catch (Exception ex)
         {
-            Logger.Debug($"Failed to upload player pocket escapes to database: {ex}");
+            Logger.Error($"Failed to upload player pocket escapes to database: {ex}");
         }
 
         PlayerPocketEscapesThisRound.Clear();
@@ -619,8 +662,8 @@ public static class EventHandlers
         {
             string json = JsonConvert.SerializeObject(totalPlayerPoints);
 
-            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
-            Logger.Debug($"Payload: {json}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}", Plugin.Instance.Config!.Debug);
+            Logger.Debug($"Payload: {json}", Plugin.Instance.Config!.Debug);
 
             using (HttpClient client = new())
             {
@@ -636,7 +679,7 @@ public static class EventHandlers
         }
         catch (Exception ex)
         {
-            Logger.Debug($"Failed to upload XP to database: {ex}");
+            Logger.Error($"Failed to upload XP to database: {ex}");
         }
 
         PlayerPointsThisRound.Clear();
@@ -649,8 +692,8 @@ public static class EventHandlers
         {
             string json = JsonConvert.SerializeObject(PlayerSnakeScoresThisRound);
 
-            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
-            Logger.Debug($"Payload: {json}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}", Plugin.Instance.Config!.Debug);
+            Logger.Debug($"Payload: {json}", Plugin.Instance.Config!.Debug);
 
             using (HttpClient client = new())
             {
@@ -665,7 +708,7 @@ public static class EventHandlers
         }
         catch (Exception ex)
         {
-            Logger.Debug($"Failed to upload SnakeScore to database: {ex}");
+            Logger.Error($"Failed to upload SnakeScore to database: {ex}");
         }
 
         PlayerSnakeScoresThisRound.Clear();
@@ -677,8 +720,8 @@ public static class EventHandlers
         {
             string json = JsonConvert.SerializeObject(FakeRankAllowed);
 
-            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
-            Logger.Debug($"Payload: {json}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}", Plugin.Instance.Config!.Debug);
+            Logger.Debug($"Payload: {json}", Plugin.Instance.Config!.Debug);
 
             using (HttpClient client = new())
             {
@@ -694,7 +737,7 @@ public static class EventHandlers
         }
         catch (Exception ex)
         {
-            Logger.Debug($"Failed to upload FakeRankAllowed to database: {ex}");
+            Logger.Error($"Failed to upload FakeRankAllowed to database: {ex}");
         }
 
         FakeRankAllowed.Clear();
@@ -706,8 +749,8 @@ public static class EventHandlers
         {
             string json = JsonConvert.SerializeObject(FakeRankAdmin);
 
-            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
-            Logger.Debug($"Payload: {json}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}", Plugin.Instance.Config!.Debug);
+            Logger.Debug($"Payload: {json}", Plugin.Instance.Config!.Debug);
 
             using (HttpClient client = new())
             {
@@ -723,7 +766,7 @@ public static class EventHandlers
         }
         catch (Exception ex)
         {
-            Logger.Debug($"Failed to upload FakeRankAdmin to database: {ex}");
+            Logger.Error($"Failed to upload FakeRankAdmin to database: {ex}");
         }
 
         FakeRankAllowed.Clear();
@@ -735,8 +778,8 @@ public static class EventHandlers
         {
             string json = JsonConvert.SerializeObject(PlayerUsernames);
 
-            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}");
-            Logger.Debug($"Payload: {json}");
+            Logger.Debug($"Uploading to endpoint: {Config.EndpointUrl}", Plugin.Instance.Config!.Debug);
+            Logger.Debug($"Payload: {json}", Plugin.Instance.Config!.Debug);
 
             using (HttpClient client = new())
             {
@@ -752,7 +795,7 @@ public static class EventHandlers
         }
         catch (Exception ex)
         {
-            Logger.Debug($"Failed to upload usernames to database: {ex}");
+            Logger.Error($"Failed to upload usernames to database: {ex}");
         }
 
         FakeRankAllowed.Clear();
@@ -762,7 +805,8 @@ public static class EventHandlers
     {
         try
         {
-            Logger.Debug($"{Config.EndpointUrl}/experience?userId={Uri.EscapeDataString(userId)}");
+            Logger.Debug($"{Config.EndpointUrl}/experience?userId={Uri.EscapeDataString(userId)}",
+                Plugin.Instance.Config!.Debug);
             using HttpClient client = new();
             client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
 
@@ -772,7 +816,8 @@ public static class EventHandlers
             response.EnsureSuccessStatusCode(); // Throw if not successful
 
             string responseText = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            Logger.Debug($"Fetched stored XP for user {userId} from database. Response: {responseText}");
+            Logger.Debug($"Fetched stored XP for user {userId} from database. Response: {responseText}",
+                Plugin.Instance.Config!.Debug);
 
             StoredPlayerPoints[userId] = int.TryParse(responseText, out int experience) ? experience : 0;
         }
