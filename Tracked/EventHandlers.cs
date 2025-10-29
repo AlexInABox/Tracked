@@ -198,7 +198,7 @@ public static class EventHandlers
     {
         bool isMedkit = ev.UsableItem.Type == ItemType.Medkit;
         bool isAdrenaline = ev.UsableItem.Type == ItemType.Adrenaline;
-        bool isCola = ev.UsableItem.Type == ItemType.SCP207;
+        bool isCola = ev.UsableItem.Type is ItemType.SCP207 or ItemType.AntiSCP207;
 
         if (!isMedkit && !isAdrenaline && !isCola) return;
 
