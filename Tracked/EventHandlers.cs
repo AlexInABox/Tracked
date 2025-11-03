@@ -159,7 +159,7 @@ public static class EventHandlers
             Alignment = HintAlignment.Left,
             AutoText = _ =>
             {
-                string hint = "<size=20><b>";
+                string hint = "<size=25><b>";
                 foreach (string s in PlayerKillFeed[ev.Player.PlayerId]) hint += s + "\n";
                 hint += "</b></size>";
                 return hint;
@@ -191,11 +191,10 @@ public static class EventHandlers
     {
         if (ev.Attacker == null || ev.Attacker.IsNpc) return;
 
-        string color = "white";
-        color = ev.OldRole.GetRoleColor().ToHex();
+        string color = ev.OldRole.GetRoleColor().ToHex();
         PlayerKillFeed[ev.Attacker.PlayerId].Insert(0, $"<color={color}>💀 - {ev.Player.Nickname}</color>");
 
-        Timing.CallDelayed(5f, () =>
+        Timing.CallDelayed(7f, () =>
         {
             if (!PlayerKillFeed.ContainsKey(ev.Attacker.PlayerId)) return;
             if (PlayerKillFeed[ev.Attacker.PlayerId].Count > 0)
