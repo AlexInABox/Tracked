@@ -35,7 +35,6 @@ public static class EventHandlers
     private static readonly Dictionary<string, int> PlayerStartingTimestamps = new();
     private static int _roundStartTimestamp;
     private static readonly Dictionary<string, int> ExtraPlayerPointsThisRound = new();
-    private static readonly Dictionary<string, int> StoredPlayerPoints = new();
 
     //Publish dictionaries
     private static readonly Dictionary<string, int> PlayerTimePlayedThisRound = new();
@@ -59,6 +58,9 @@ public static class EventHandlers
 
     //Hint related dictionaries
     private static readonly Dictionary<int, List<string>> PlayerKillFeed = new();
+
+    //Coroutine Handelers
+    private static CoroutineHandle _fetchZvcCoroutine;
 
     public static void RegisterEvents()
     {
@@ -90,6 +92,9 @@ public static class EventHandlers
 
         //Points for window destructions
         PlayerEvents.DamagedWindow += OnDamagedWindow;
+
+        //Logic Loops
+        _fetchZvcCoroutine = Timing.RunCoroutine(Utils.FetchAllZvcCoroutine());
     }
 
     public static void UnregisterEvents()
@@ -106,6 +111,8 @@ public static class EventHandlers
         ServerEvents.WaitingForPlayers -= OnWaitingForPlayers;
         PlayerEvents.Escaping -= OnEscaping;
         PlayerEvents.DamagedWindow -= OnDamagedWindow;
+
+        Timing.KillCoroutines(_fetchZvcCoroutine);
     }
 
     private static void OnJoined(PlayerJoinedEventArgs ev)
@@ -125,10 +132,6 @@ public static class EventHandlers
         FakeRankAllowed[ev.Player.UserId] = ev.Player.HasPermissions("fakerank");
         FakeRankAdmin[ev.Player.UserId] = ev.Player.HasPermissions("fakerank.admin");
 
-
-        // Now initialize the HUD
-        GetStoredZeitvertreibCoinsFromDatabase(userId);
-
         Hint zvcHint = new()
         {
             Alignment = HintAlignment.Left,
@@ -136,7 +139,7 @@ public static class EventHandlers
             {
                 string hint = string.Empty;
                 int zvc = 0;
-                if (StoredPlayerPoints.TryGetValue(userId, out int storedPoints))
+                if (Utils.RemoteZvcCount.TryGetValue(userId, out int storedPoints))
                     zvc += storedPoints;
                 if (ExtraPlayerPointsThisRound.TryGetValue(userId, out int extraPoints))
                     zvc += extraPoints;
@@ -798,32 +801,6 @@ public static class EventHandlers
         }
 
         FakeRankAllowed.Clear();
-    }
-
-    private static async void GetStoredZeitvertreibCoinsFromDatabase(string userId)
-    {
-        try
-        {
-            Logger.Debug($"{Config.EndpointUrl}/experience?userId={Uri.EscapeDataString(userId)}",
-                Plugin.Instance.Config!.Debug);
-            using HttpClient client = new();
-            client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
-
-            HttpResponseMessage response = await client
-                .GetAsync($"{Config.EndpointUrl}/experience?userId={Uri.EscapeDataString(userId)}")
-                .ConfigureAwait(false);
-            response.EnsureSuccessStatusCode(); // Throw if not successful
-
-            string responseText = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            Logger.Debug($"Fetched stored XP for user {userId} from database. Response: {responseText}",
-                Plugin.Instance.Config!.Debug);
-
-            StoredPlayerPoints[userId] = int.TryParse(responseText, out int experience) ? experience : 0;
-        }
-        catch (Exception ex)
-        {
-            Logger.Error($"Failed to fetch stored XP for user {userId}: {ex}");
-        }
     }
 
 
