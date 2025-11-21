@@ -132,6 +132,8 @@ public static class EventHandlers
         FakeRankAllowed[ev.Player.UserId] = ev.Player.HasPermissions("fakerank");
         FakeRankAdmin[ev.Player.UserId] = ev.Player.HasPermissions("fakerank.admin");
 
+        _ = Utils.FetchZvcForUser(ev.Player.UserId);
+
         Hint zvcHint = new()
         {
             Alignment = HintAlignment.Left,

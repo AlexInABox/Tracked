@@ -29,7 +29,9 @@ public static class Utils
 
     private static async Task FetchAllZvc()
     {
-        List<string> userIds = Player.ReadyList.SkipWhile(p => !p.IsHost || p.IsNpc).Select(p => p.UserId).ToList();
+        List<string> userIds = Player.ReadyList.Where(p => !p.IsDummy && !p.IsHost).Select(p => p.UserId).ToList();
+        if (userIds.Count == 0) return;
+
         try
         {
             // Build query string: ?userId=a&userId=b&userId=c
@@ -61,6 +63,33 @@ public static class Utils
             Logger.Error($"Failed to fetch ZVC list: {ex}");
         }
     }
+
+    public static async Task FetchZvcForUser(string userId)
+    {
+        try
+        {
+            string qs = $"userId={Uri.EscapeDataString(userId)}";
+
+            using HttpClient client = new();
+            client.DefaultRequestHeaders.Add("Authorization", Config.Apikey);
+
+            HttpResponseMessage response = await client
+                .GetAsync($"{Config.EndpointUrl}/public/zvc?{qs}")
+                .ConfigureAwait(false);
+
+            string responseText = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            ZvcResponse data = JsonConvert.DeserializeObject<List<ZvcResponse>>(responseText)?
+                .FirstOrDefault(x => x.userId == userId);
+
+            RemoteZvcCount[userId] = data?.zvc ?? 0;
+        }
+        catch
+        {
+            RemoteZvcCount[userId] = 0;
+        }
+    }
+
 
     private class ZvcResponse
     {
